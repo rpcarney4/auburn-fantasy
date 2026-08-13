@@ -1,0 +1,246 @@
+// Prisma schema for the Auburn Fantasy league site.
+// Data is populated by scripts/sync-sleeper.ts on a schedule (see .github/workflows/sync-sleeper.yml),
+// not written to directly by the app.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum LeagueType {
+  DYNASTY
+  REDRAFT
+}
+
+enum TradeAssetType {
+  PLAYER
+  PICK
+}
+
+// One row per real person. Shared across both the dynasty and redraft leagues.
+model User {
+  id          String  @id @default(cuid())
+  sleeperId   String  @unique
+  username    String
+  displayName String
+  avatar      String?
+
+  teams Team[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// One row per league-type per season, since Sleeper issues a new league_id
+// each season and chains them via previous_league_id.
+model League {
+  id              String     @id @default(cuid())
+  sleeperLeagueId String     @unique
+  type            LeagueType
+  season          Int
+  // Division names in order (index 0 = division 1, etc). Empty if the
+  // league isn't split into divisions.
+  divisionNames   String[]   @default([])
+
+  teams            Team[]
+  games            Game[]
+  trades           Trade[]
+  draft            Draft?
+  playerWeekScores PlayerWeekScore[]
+  playoffMatches   PlayoffMatch[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([type, season])
+}
+
+// A user's roster within one league-season. Persists identity via sleeperRosterId.
+model Team {
+  id              String  @id @default(cuid())
+  user            User    @relation(fields: [userId], references: [id])
+  userId          String
+  league          League  @relation(fields: [leagueId], references: [id])
+  leagueId        String
+  sleeperRosterId Int
+  teamName        String?
+  // 1-indexed; matches the position in League.divisionNames. Null if the
+  // league has no divisions.
+  division        Int?
+  // Whether this team won the league championship for its season.
+  isChampion      Boolean @default(false)
+
+  wins          Int   @default(0)
+  losses        Int   @default(0)
+  ties          Int   @default(0)
+  pointsFor     Float @default(0)
+  pointsAgainst Float @default(0)
+
+  roster                RosterPlayer[]
+  homeGames             Game[]            @relation("HomeTeam")
+  awayGames             Game[]            @relation("AwayTeam")
+  draftPicksMade        DraftPick[]
+  tradeAssetsOut        TradeAsset[]      @relation("FromTeam")
+  tradeAssetsIn         TradeAsset[]      @relation("ToTeam")
+  playerWeekScores      PlayerWeekScore[]
+  playoffMatchesAsTeam1 PlayoffMatch[]    @relation("PlayoffTeam1")
+  playoffMatchesAsTeam2 PlayoffMatch[]    @relation("PlayoffTeam2")
+  playoffMatchesWon     PlayoffMatch[]    @relation("PlayoffWinner")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([leagueId, sleeperRosterId])
+}
+
+// NFL player, keyed by Sleeper's player_id. Shared across all leagues/seasons.
+model Player {
+  id       String  @id
+  fullName String
+  position String?
+  nflTeam  String?
+
+  rosterSlots RosterPlayer[]
+  draftPicks  DraftPick[]
+  tradeAssets TradeAsset[]
+  weekScores  PlayerWeekScore[]
+
+  updatedAt DateTime @updatedAt
+}
+
+// One player's fantasy score for one team in one week. Used to compute a
+// player's average score for a season on the Team page.
+model PlayerWeekScore {
+  id       String @id @default(cuid())
+  league   League @relation(fields: [leagueId], references: [id])
+  leagueId String
+  team     Team   @relation(fields: [teamId], references: [id])
+  teamId   String
+  player   Player @relation(fields: [playerId], references: [id])
+  playerId String
+  week     Int
+  points   Float
+  // Whether this player was in the starting lineup for this team in this
+  // specific week (independent of the current roster snapshot's isStarter).
+  isStarter Boolean @default(false)
+  // Raw per-category stats from Sleeper for this player-week (rec, rec_yd,
+  // pass_td, etc.), used for box score breakdowns. Shape varies by position.
+  stats Json?
+
+  @@unique([teamId, playerId, week])
+}
+
+// Current roster snapshot for a team, refreshed on each sync.
+model RosterPlayer {
+  id        String  @id @default(cuid())
+  team      Team    @relation(fields: [teamId], references: [id])
+  teamId    String
+  player    Player  @relation(fields: [playerId], references: [id])
+  playerId  String
+  isStarter Boolean @default(false)
+  // On the team's taxi squad (dynasty leagues only).
+  isTaxi    Boolean @default(false)
+
+  @@unique([teamId, playerId])
+}
+
+// One completed matchup between two teams in a given week.
+model Game {
+  id         String  @id @default(cuid())
+  league     League  @relation(fields: [leagueId], references: [id])
+  leagueId   String
+  season     Int
+  week       Int
+  homeTeam   Team    @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  homeTeamId String
+  awayTeam   Team    @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  awayTeamId String
+  homeScore  Float
+  awayScore  Float
+  isPlayoffs Boolean @default(false)
+
+  @@unique([leagueId, week, homeTeamId, awayTeamId])
+}
+
+// One matchup from Sleeper's winners bracket, used to render the Playoffs
+// page. `round`/`matchNum` mirror Sleeper's `r`/`m`; `placement` mirrors `p`
+// (1 = championship, 3 = third place, etc) and is null for non-deciding
+// rounds. Teams are null until Sleeper resolves who advances into that slot.
+model PlayoffMatch {
+  id           String  @id @default(cuid())
+  league       League  @relation(fields: [leagueId], references: [id])
+  leagueId     String
+  round        Int
+  matchNum     Int
+  placement    Int?
+  team1        Team?   @relation("PlayoffTeam1", fields: [team1Id], references: [id])
+  team1Id      String?
+  team1Score   Float?
+  team2        Team?   @relation("PlayoffTeam2", fields: [team2Id], references: [id])
+  team2Id      String?
+  team2Score   Float?
+  winner       Team?   @relation("PlayoffWinner", fields: [winnerId], references: [id])
+  winnerId     String?
+
+  @@unique([leagueId, round, matchNum])
+}
+
+model Draft {
+  id             String @id @default(cuid())
+  league         League @relation(fields: [leagueId], references: [id])
+  leagueId       String @unique
+  sleeperDraftId String @unique
+  season         Int
+
+  picks DraftPick[]
+}
+
+model DraftPick {
+  id       String  @id @default(cuid())
+  draft    Draft   @relation(fields: [draftId], references: [id])
+  draftId  String
+  round    Int
+  pickNo   Int
+  team     Team    @relation(fields: [teamId], references: [id])
+  teamId   String
+  player   Player? @relation(fields: [playerId], references: [id])
+  playerId String?
+  isKeeper Boolean @default(false)
+
+  @@unique([draftId, pickNo])
+}
+
+// One trade transaction from Sleeper. Groups the individual assets that moved.
+model Trade {
+  id                   String   @id @default(cuid())
+  league               League   @relation(fields: [leagueId], references: [id])
+  leagueId             String
+  sleeperTransactionId String   @unique
+  tradeDate            DateTime
+  season               Int
+  week                 Int?
+
+  assets TradeAsset[]
+}
+
+// One asset (player or pick) moving from one team to another within a Trade.
+// The "Linked To" column on the Trade History page is derived by looking up
+// sibling TradeAsset rows that share the same tradeId.
+model TradeAsset {
+  id              String         @id @default(cuid())
+  trade           Trade          @relation(fields: [tradeId], references: [id])
+  tradeId         String
+  assetType       TradeAssetType
+  player          Player?        @relation(fields: [playerId], references: [id])
+  playerId        String?
+  pickDescription String?
+  fromTeam        Team           @relation("FromTeam", fields: [fromTeamId], references: [id])
+  fromTeamId      String
+  toTeam          Team           @relation("ToTeam", fields: [toTeamId], references: [id])
+  toTeamId        String
+}

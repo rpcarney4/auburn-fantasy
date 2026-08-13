@@ -1,36 +1,46 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AUB Fantasy League
 
-## Getting Started
+A Next.js site for our dynasty and redraft fantasy football leagues — team pages, draft history, trade history, game log with box scores, playoff brackets, and season stats. Data is pulled from [Sleeper's public API](https://docs.sleeper.com/) and stored in Postgres via Prisma; the app itself is read-only against that data.
 
-First, run the development server:
+## Stack
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- Next.js (App Router) + React + Tailwind
+- Prisma + Postgres (Supabase)
+- Sleeper API for all league data (`scripts/sync-sleeper.ts`)
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Local setup
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Copy `.env.example` to `.env` and fill in `DATABASE_URL` / `DIRECT_URL` for your Postgres instance.
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Apply migrations:
+   ```bash
+   npx prisma migrate deploy
+   ```
+4. Pull league data from Sleeper:
+   ```bash
+   npm run sync:sleeper
+   ```
+5. Run the dev server:
+   ```bash
+   npm run dev
+   ```
+   Open [http://localhost:3000](http://localhost:3000).
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Syncing data
 
-## Learn More
+`npm run sync:sleeper` re-pulls everything from Sleeper (rosters, matchups, drafts, trades, playoff brackets, weekly player stats) and upserts it into the database. It's idempotent — safe to run repeatedly.
 
-To learn more about Next.js, take a look at the following resources:
+In production this runs automatically every 6 hours via `.github/workflows/sync-sleeper.yml`, which needs `DATABASE_URL` and `DIRECT_URL` set as repo secrets (Settings → Secrets and variables → Actions).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Which leagues/seasons get synced is configured in `src/lib/sleeper-config.ts`.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Deploying (Vercel)
 
-## Deploy on Vercel
+1. Import this repo on [Vercel](https://vercel.com/new).
+2. Add `DATABASE_URL` and `DIRECT_URL` as environment variables in the Vercel project settings.
+3. Deploy. `postinstall` runs `prisma generate` automatically as part of the build.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Migrations aren't run automatically on deploy — run `npx prisma migrate deploy` (with production env vars) whenever the schema changes, or let the next scheduled sync-sleeper run apply it.

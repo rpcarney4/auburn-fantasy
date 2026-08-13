@@ -1,0 +1,30 @@
+name: Sync Sleeper data
+
+on:
+  schedule:
+    # Every 6 hours. Sleeper's API is free and read-only, so this is safe to
+    # run year-round even during the offseason when nothing changes.
+    - cron: "0 */6 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+
+      - run: npm run sync:sleeper
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
