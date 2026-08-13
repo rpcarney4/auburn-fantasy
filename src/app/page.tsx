@@ -52,8 +52,8 @@ export default async function HomePage() {
             Leagues at a Glance
           </h2>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <LeagueGlanceBox title="Redraft" glance={redraftGlance} />
-            <LeagueGlanceBox title="Dynasty" glance={dynastyGlance} />
+            <LeagueGlanceBox title="Redraft - Est. 2021" glance={redraftGlance} />
+            <LeagueGlanceBox title="Dynasty - Est. 2023" glance={dynastyGlance} />
           </div>
         </div>
       )}
