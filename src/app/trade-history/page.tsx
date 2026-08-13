@@ -1,18 +1,18 @@
 import { EmptyState } from "@/components/empty-state";
-import { getTradeAssetRows } from "@/lib/queries";
+import { getTrades } from "@/lib/queries";
 import { TradeHistoryView } from "./trade-history-view";
 
 export const dynamic = "force-dynamic";
 
 export default async function TradeHistoryPage() {
-  let rows: Awaited<ReturnType<typeof getTradeAssetRows>> | null = null;
+  let trades: Awaited<ReturnType<typeof getTrades>> | null = null;
   try {
-    rows = await getTradeAssetRows();
+    trades = await getTrades();
   } catch {
-    rows = null;
+    trades = null;
   }
 
-  if (!rows) {
+  if (!trades) {
     return (
       <EmptyState
         title="No trade data yet"
@@ -21,5 +21,5 @@ export default async function TradeHistoryPage() {
     );
   }
 
-  return <TradeHistoryView rows={rows} />;
+  return <TradeHistoryView trades={trades} />;
 }

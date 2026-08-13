@@ -56,7 +56,7 @@ export function SeasonSummaryCard({ summary }: { summary: SeasonSummary }) {
             </CardContent>
           </Card>
 
-          <div className="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <ExtremeCard
               label="Most Efficient Manager"
               name={mostEfficient?.name}

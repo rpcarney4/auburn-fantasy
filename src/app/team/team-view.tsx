@@ -53,6 +53,13 @@ type TeamsByType = {
   bySeason: Record<number, SeasonTeams>;
 };
 
+// Columns adapt to available width instead of jumping at fixed breakpoints,
+// so an odd team count (e.g. 5 in a division) doesn't leave a single card
+// stretched across an otherwise-empty row.
+const TEAM_GRID_STYLE = {
+  gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
+};
+
 function TeamCard({ team, isHistorical }: { team: TeamData; isHistorical: boolean }) {
   const renderPlayer = (
     list: RosterPlayer[],
@@ -82,7 +89,7 @@ function TeamCard({ team, isHistorical }: { team: TeamData; isHistorical: boolea
 
   return (
     <Link href={`/team/${team.user.id}`} className="block rounded-xl">
-      <Card className="h-full transition hover:-translate-y-0.5 hover:ring-primary/40 hover:shadow-md">
+      <Card className="h-full transition-all duration-150 hover:-translate-y-1 hover:ring-2 hover:ring-primary hover:shadow-lg">
         <CardHeader>
           <CardTitle className="flex items-center justify-between text-base">
             <span>{team.teamName || team.user.displayName}</span>
@@ -233,7 +240,7 @@ export function TeamView({
               <h2 className="text-lg font-semibold tracking-tight">
                 {activeSeason.divisionNames[division - 1] ?? `Division ${division}`}
               </h2>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <div className="grid gap-4" style={TEAM_GRID_STYLE}>
                 {teams.map((team) => (
                   <TeamCard
                     key={team.id}
@@ -246,7 +253,7 @@ export function TeamView({
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-4" style={TEAM_GRID_STYLE}>
           {activeSeason.teams.map((team) => (
             <TeamCard
               key={team.id}
