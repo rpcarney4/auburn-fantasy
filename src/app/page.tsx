@@ -1,18 +1,23 @@
 import Image from "next/image";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { LeagueType } from "@prisma/client";
 import { EmptyState } from "@/components/empty-state";
 import { SeasonSummaryCard } from "@/components/season-summary-card";
-import { getLeagueSummary, getSeasonSummaries } from "@/lib/queries";
+import { LeagueGlanceBox } from "@/components/league-glance-box";
+import { getLeagueSummary, getLeagueGlance, getSeasonSummaries } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   let summary: Awaited<ReturnType<typeof getLeagueSummary>> | null = null;
   let seasons: Awaited<ReturnType<typeof getSeasonSummaries>> = [];
+  let redraftGlance: Awaited<ReturnType<typeof getLeagueGlance>> | null = null;
+  let dynastyGlance: Awaited<ReturnType<typeof getLeagueGlance>> | null = null;
   try {
-    [summary, seasons] = await Promise.all([
+    [summary, seasons, redraftGlance, dynastyGlance] = await Promise.all([
       getLeagueSummary(),
       getSeasonSummaries(),
+      getLeagueGlance(LeagueType.REDRAFT),
+      getLeagueGlance(LeagueType.DYNASTY),
     ]);
   } catch {
     summary = null;
@@ -36,52 +41,28 @@ export default async function HomePage() {
         </p>
       </div>
 
-      {!summary ? (
+      {!summary || !redraftGlance || !dynastyGlance ? (
         <EmptyState
           title="No league data yet"
           detail="Connect a database and run `npm run sync:sleeper` to pull league history from Sleeper."
         />
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm text-muted-foreground">
-                Managers
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-3xl font-bold">
-              {summary.userCount}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm text-muted-foreground">
-                Dynasty Seasons
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-3xl font-bold">
-              {summary.dynastySeasons.length > 0
-                ? `${Math.min(...summary.dynastySeasons)}–${Math.max(...summary.dynastySeasons)}`
-                : "—"}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm text-muted-foreground">
-                Redraft Seasons
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-3xl font-bold">
-              {summary.redraftSeasons.length > 0
-                ? `${Math.min(...summary.redraftSeasons)}–${Math.max(...summary.redraftSeasons)}`
-                : "—"}
-            </CardContent>
-          </Card>
+        <div className="flex flex-col gap-4">
+          <h2 className="text-center text-xl font-semibold tracking-tight">
+            Leagues at a Glance
+          </h2>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <LeagueGlanceBox title="Redraft" glance={redraftGlance} />
+            <LeagueGlanceBox title="Dynasty" glance={dynastyGlance} />
+          </div>
         </div>
       )}
 
       {seasons.length > 0 && (
         <div className="flex flex-col gap-4">
+          <h2 className="text-center text-xl font-semibold tracking-tight">
+            Past Seasons
+          </h2>
           {seasons.map((s) => (
             <SeasonSummaryCard key={s.leagueId} summary={s} />
           ))}
