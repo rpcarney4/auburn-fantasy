@@ -754,8 +754,9 @@ export type TradeCard = {
   teams: TradeCardTeam[];
 };
 
-export async function getTrades(): Promise<TradeCard[]> {
+export async function getTrades(type: LeagueType): Promise<TradeCard[]> {
   const trades = await prisma.trade.findMany({
+    where: { league: { type } },
     include: {
       assets: {
         include: {

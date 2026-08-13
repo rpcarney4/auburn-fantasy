@@ -1,3 +1,4 @@
+import { LeagueType } from "@prisma/client";
 import { EmptyState } from "@/components/empty-state";
 import { getTrades } from "@/lib/queries";
 import { TradeHistoryView } from "./trade-history-view";
@@ -5,14 +6,20 @@ import { TradeHistoryView } from "./trade-history-view";
 export const dynamic = "force-dynamic";
 
 export default async function TradeHistoryPage() {
-  let trades: Awaited<ReturnType<typeof getTrades>> | null = null;
+  let data: [
+    Awaited<ReturnType<typeof getTrades>>,
+    Awaited<ReturnType<typeof getTrades>>,
+  ] | null = null;
   try {
-    trades = await getTrades();
+    data = await Promise.all([
+      getTrades(LeagueType.DYNASTY),
+      getTrades(LeagueType.REDRAFT),
+    ]);
   } catch {
-    trades = null;
+    data = null;
   }
 
-  if (!trades) {
+  if (!data) {
     return (
       <EmptyState
         title="No trade data yet"
@@ -21,5 +28,6 @@ export default async function TradeHistoryPage() {
     );
   }
 
-  return <TradeHistoryView trades={trades} />;
+  const [dynasty, redraft] = data;
+  return <TradeHistoryView dynasty={dynasty} redraft={redraft} />;
 }

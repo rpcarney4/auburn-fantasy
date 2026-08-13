@@ -10,13 +10,23 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 import type { TradeCard, TradeCardAsset } from "@/lib/queries";
 
 const ALL = "__all__";
 const PICK = "PICK";
 
-export function TradeHistoryView({ trades }: { trades: TradeCard[] }) {
+export function TradeHistoryView({
+  dynasty,
+  redraft,
+}: {
+  dynasty: TradeCard[];
+  redraft: TradeCard[];
+}) {
+  const [view, setView] = useState<"DYNASTY" | "REDRAFT">("DYNASTY");
+  const trades = view === "DYNASTY" ? dynasty : redraft;
+
   const [search, setSearch] = useState("");
   const [season, setSeason] = useState(ALL);
   const [position, setPosition] = useState(ALL);
@@ -72,6 +82,21 @@ export function TradeHistoryView({ trades }: { trades: TradeCard[] }) {
       <h1 className="text-2xl font-bold tracking-tight">Trade History</h1>
 
       <div className="flex flex-wrap items-center gap-3">
+        <ToggleGroup
+          type="single"
+          value={view}
+          onValueChange={(v) => {
+            if (!v) return;
+            setView(v as "DYNASTY" | "REDRAFT");
+            setSearch("");
+            setSeason(ALL);
+            setPosition(ALL);
+            setTeam(ALL);
+          }}
+        >
+          <ToggleGroupItem value="DYNASTY">Dynasty</ToggleGroupItem>
+          <ToggleGroupItem value="REDRAFT">Redraft</ToggleGroupItem>
+        </ToggleGroup>
         <Input
           placeholder="Search player..."
           value={search}
@@ -120,7 +145,9 @@ export function TradeHistoryView({ trades }: { trades: TradeCard[] }) {
       </div>
 
       {trades.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No trade data synced yet.</p>
+        <p className="text-sm text-muted-foreground">
+          No {view.toLowerCase()} trade data synced yet.
+        </p>
       ) : filtered.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           No trades match the current filters.
