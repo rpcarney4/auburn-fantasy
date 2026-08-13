@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { LeagueType } from "@prisma/client";
 import { BackButton } from "@/components/back-button";
+import { WeeklyScoreChart } from "@/components/weekly-score-chart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -288,7 +289,17 @@ function SeasonDetail({
           </CardContent>
         </Card>
 
-        <HeadToHeadCard records={headToHead} />
+        <div className="flex flex-col gap-6 sm:flex-row sm:items-stretch">
+          <div className="w-full sm:w-1/2">
+            <WeeklyScoreChart
+              weeklyScores={season.stats.weeklyScores}
+              average={season.stats.pointsForAvg}
+            />
+          </div>
+          <div className="w-full sm:w-1/2">
+            <HeadToHeadCard records={headToHead} />
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -296,7 +307,7 @@ function SeasonDetail({
 
 function HeadToHeadCard({ records }: { records: HeadToHeadRecord[] }) {
   return (
-    <Card className="flex-1">
+    <Card className="h-full">
       <CardHeader>
         <CardTitle className="text-base">Head-to-Head Records</CardTitle>
       </CardHeader>

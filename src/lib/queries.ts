@@ -133,6 +133,286 @@ export async function getSeasonSummaries(): Promise<SeasonSummary[]> {
   return summaries;
 }
 
+export type LeagueGlanceStat = { name: string; value: number } | null;
+export type LeagueGlanceRecord = {
+  name: string;
+  wins: number;
+  losses: number;
+  ties: number;
+} | null;
+export type LeaguePlacement = {
+  userId: string;
+  name: string;
+  avgPlacement: number;
+  seasonsCounted: number;
+};
+export type LeagueGlanceRivalry = {
+  dominantName: string;
+  submissiveName: string;
+  wins: number;
+  losses: number;
+  ties: number;
+} | null;
+
+export type LeagueGlance = {
+  mostPointsScored: LeagueGlanceStat;
+  leastPointsScored: LeagueGlanceStat;
+  leagueHole: LeagueGlanceStat;
+  bestManager: LeagueGlanceRecord;
+  worstManager: LeagueGlanceRecord;
+  hoarder: LeagueGlanceStat;
+  skillDiff: LeagueGlanceStat;
+  whosYourDaddy: LeagueGlanceRivalry;
+  placements: LeaguePlacement[];
+};
+
+const EMPTY_LEAGUE_GLANCE: LeagueGlance = {
+  mostPointsScored: null,
+  leastPointsScored: null,
+  leagueHole: null,
+  bestManager: null,
+  worstManager: null,
+  hoarder: null,
+  skillDiff: null,
+  whosYourDaddy: null,
+  placements: [],
+};
+
+// Career-spanning stats for the "Leagues at a Glance" boxes on the home
+// page. Named by manager (User.displayName) rather than team, since team
+// names change season to season but the person doesn't.
+export async function getLeagueGlance(type: LeagueType): Promise<LeagueGlance> {
+  const leagues = await prisma.league.findMany({
+    where: { type },
+    orderBy: { season: "asc" },
+  });
+  if (leagues.length === 0) return EMPTY_LEAGUE_GLANCE;
+
+  const latestSeason = leagues[leagues.length - 1].season;
+  const leagueIds = leagues.map((l) => l.id);
+
+  const teams = await prisma.team.findMany({
+    where: { leagueId: { in: leagueIds } },
+    include: { user: true },
+  });
+
+  // "Who's Your Daddy": the most lopsided head-to-head rivalry between any
+  // two managers, across every season of this league type.
+  const games = await prisma.game.findMany({
+    where: {
+      leagueId: { in: leagueIds },
+      NOT: { homeScore: 0, awayScore: 0 },
+    },
+    include: {
+      homeTeam: { include: { user: true } },
+      awayTeam: { include: { user: true } },
+    },
+  });
+
+  type PairRecord = {
+    userAId: string;
+    userBId: string;
+    aWins: number;
+    bWins: number;
+    ties: number;
+  };
+  const nameByUserId = new Map<string, string>();
+  const pairs = new Map<string, PairRecord>();
+  for (const g of games) {
+    const homeUserId = g.homeTeam.userId;
+    const awayUserId = g.awayTeam.userId;
+    if (homeUserId === awayUserId) continue;
+    nameByUserId.set(homeUserId, g.homeTeam.user.displayName);
+    nameByUserId.set(awayUserId, g.awayTeam.user.displayName);
+
+    const [userAId, userBId] = [homeUserId, awayUserId].sort();
+    const key = `${userAId}:${userBId}`;
+    const rec = pairs.get(key) ?? { userAId, userBId, aWins: 0, bWins: 0, ties: 0 };
+    if (g.homeScore === g.awayScore) {
+      rec.ties += 1;
+    } else {
+      const winnerId = g.homeScore > g.awayScore ? homeUserId : awayUserId;
+      if (winnerId === userAId) rec.aWins += 1;
+      else rec.bWins += 1;
+    }
+    pairs.set(key, rec);
+  }
+
+  let whosYourDaddy: LeagueGlanceRivalry = null;
+  let bestDiff = -1;
+  for (const rec of pairs.values()) {
+    const diff = Math.abs(rec.aWins - rec.bWins);
+    if (diff > bestDiff) {
+      bestDiff = diff;
+      const aIsDominant = rec.aWins >= rec.bWins;
+      whosYourDaddy = {
+        dominantName: nameByUserId.get(aIsDominant ? rec.userAId : rec.userBId) ?? "Unknown",
+        submissiveName: nameByUserId.get(aIsDominant ? rec.userBId : rec.userAId) ?? "Unknown",
+        wins: aIsDominant ? rec.aWins : rec.bWins,
+        losses: aIsDominant ? rec.bWins : rec.aWins,
+        ties: rec.ties,
+      };
+    }
+  }
+
+  type Totals = {
+    userId: string;
+    name: string;
+    pointsFor: number;
+    pointsAgainst: number;
+    wins: number;
+    losses: number;
+    ties: number;
+  };
+  const totalsByUser = new Map<string, Totals>();
+  const ensureTotals = (userId: string, name: string) => {
+    const existing = totalsByUser.get(userId);
+    if (existing) return existing;
+    const created: Totals = {
+      userId,
+      name,
+      pointsFor: 0,
+      pointsAgainst: 0,
+      wins: 0,
+      losses: 0,
+      ties: 0,
+    };
+    totalsByUser.set(userId, created);
+    return created;
+  };
+
+  for (const t of teams) {
+    const totals = ensureTotals(t.userId, t.user.displayName);
+    totals.pointsFor += t.pointsFor;
+    totals.pointsAgainst += t.pointsAgainst;
+    totals.wins += t.wins;
+    totals.losses += t.losses;
+    totals.ties += t.ties;
+  }
+
+  // Exclude managers with no games played yet (e.g. a brand new season's
+  // roster) from stats that would otherwise trivially "win" at 0.
+  const activeTotals = [...totalsByUser.values()].filter(
+    (t) => t.wins + t.losses + t.ties > 0
+  );
+  const winPct = (t: { wins: number; losses: number; ties: number }) => {
+    const games = t.wins + t.losses + t.ties;
+    return games > 0 ? (t.wins + t.ties * 0.5) / games : 0;
+  };
+
+  const maxBy = <T,>(arr: T[], score: (t: T) => number): T | null =>
+    arr.length === 0
+      ? null
+      : arr.reduce((a, b) => (score(b) > score(a) ? b : a));
+  const minBy = <T,>(arr: T[], score: (t: T) => number): T | null =>
+    arr.length === 0
+      ? null
+      : arr.reduce((a, b) => (score(b) < score(a) ? b : a));
+
+  const mostPointsScored = maxBy(activeTotals, (t) => t.pointsFor);
+  const leastPointsScored = minBy(activeTotals, (t) => t.pointsFor);
+  const leagueHole = maxBy(activeTotals, (t) => t.pointsAgainst);
+  const bestManager = maxBy(activeTotals, winPct);
+  const worstManager = minBy(activeTotals, winPct);
+  const skillDiff = maxBy(activeTotals, (t) => t.pointsAgainst - t.pointsFor);
+
+  // The Hoarder: most waiver/free-agent adds across every season.
+  const teamIds = teams.map((t) => t.id);
+  const claimCounts =
+    teamIds.length > 0
+      ? await prisma.rosterTransaction.groupBy({
+          by: ["teamId"],
+          where: { teamId: { in: teamIds }, type: "ADD" },
+          _count: { _all: true },
+        })
+      : [];
+  const teamById = new Map(teams.map((t) => [t.id, t]));
+  const claimsByUser = new Map<string, number>();
+  for (const c of claimCounts) {
+    const team = teamById.get(c.teamId);
+    if (!team) continue;
+    claimsByUser.set(
+      team.userId,
+      (claimsByUser.get(team.userId) ?? 0) + c._count._all
+    );
+  }
+  let hoarder: LeagueGlanceStat = null;
+  for (const [userId, count] of claimsByUser) {
+    const totals = totalsByUser.get(userId);
+    if (!totals) continue;
+    if (!hoarder || count > hoarder.value) hoarder = { name: totals.name, value: count };
+  }
+
+  // Average final placement, completed seasons only (i.e. not the current,
+  // still-in-progress one). Placement = rank within that season's
+  // standings by win% then points for.
+  const placementTotals = new Map<string, { total: number; count: number; name: string }>();
+  for (const league of leagues) {
+    if (league.season >= latestSeason) continue;
+    const seasonTeams = teams.filter((t) => t.leagueId === league.id);
+    if (seasonTeams.length === 0) continue;
+
+    const ranked = [...seasonTeams].sort((a, b) => {
+      const pctA = winPct(a);
+      const pctB = winPct(b);
+      if (pctB !== pctA) return pctB - pctA;
+      return b.pointsFor - a.pointsFor;
+    });
+    ranked.forEach((t, idx) => {
+      const entry = placementTotals.get(t.userId) ?? {
+        total: 0,
+        count: 0,
+        name: t.user.displayName,
+      };
+      entry.total += idx + 1;
+      entry.count += 1;
+      placementTotals.set(t.userId, entry);
+    });
+  }
+  const placements: LeaguePlacement[] = [...placementTotals.entries()]
+    .map(([userId, v]) => ({
+      userId,
+      name: v.name,
+      avgPlacement: v.total / v.count,
+      seasonsCounted: v.count,
+    }))
+    .sort((a, b) => a.avgPlacement - b.avgPlacement);
+
+  return {
+    mostPointsScored: mostPointsScored
+      ? { name: mostPointsScored.name, value: mostPointsScored.pointsFor }
+      : null,
+    leastPointsScored: leastPointsScored
+      ? { name: leastPointsScored.name, value: leastPointsScored.pointsFor }
+      : null,
+    leagueHole: leagueHole
+      ? { name: leagueHole.name, value: leagueHole.pointsAgainst }
+      : null,
+    bestManager: bestManager
+      ? {
+          name: bestManager.name,
+          wins: bestManager.wins,
+          losses: bestManager.losses,
+          ties: bestManager.ties,
+        }
+      : null,
+    worstManager: worstManager
+      ? {
+          name: worstManager.name,
+          wins: worstManager.wins,
+          losses: worstManager.losses,
+          ties: worstManager.ties,
+        }
+      : null,
+    hoarder,
+    skillDiff: skillDiff
+      ? { name: skillDiff.name, value: skillDiff.pointsAgainst - skillDiff.pointsFor }
+      : null,
+    whosYourDaddy,
+    placements,
+  };
+}
+
 // --- Team page --------------------------------------------------------------
 
 const POSITION_ORDER = ["QB", "RB", "WR", "TE", "K", "DEF"];
@@ -384,15 +664,25 @@ export async function getTeamDetail(userId: string) {
   const statsByTeamId = new Map<string, TeamSeasonStats>();
   const avgScoreByTeamId = new Map<string, Map<string, number>>();
   for (const t of teams) {
-    const [scores, gamesPlayed] = await Promise.all([
+    const [scores, games] = await Promise.all([
       prisma.playerWeekScore.findMany({
         where: { teamId: t.id },
         include: { player: true },
       }),
-      prisma.game.count({
+      prisma.game.findMany({
         where: { leagueId: t.leagueId, OR: [{ homeTeamId: t.id }, { awayTeamId: t.id }] },
+        orderBy: { week: "asc" },
       }),
     ]);
+    // Team.pointsFor (from Sleeper) only ever covers regular-season weeks,
+    // so gamesPlayed has to match that scope too, or "Points For (Avg)"
+    // silently divides by too many games.
+    const gamesPlayed = games.filter((g) => !g.isPlayoffs).length;
+    const weeklyScores = games.map((g) => ({
+      week: g.week,
+      points: g.homeTeamId === t.id ? g.homeScore : g.awayScore,
+      isPlayoffs: g.isPlayoffs,
+    }));
 
     const byPlayer = new Map<
       string,
@@ -434,6 +724,7 @@ export async function getTeamDetail(userId: string) {
 
     statsByTeamId.set(t.id, {
       gamesPlayed,
+      weeklyScores,
       pointsForMax,
       pointsForAvg: gamesPlayed > 0 ? t.pointsFor / gamesPlayed : null,
       efficiency: pointsForMax > 0 ? t.pointsFor / pointsForMax : null,
@@ -503,6 +794,7 @@ export async function getTeamDetail(userId: string) {
 
 type TeamSeasonStats = {
   gamesPlayed: number;
+  weeklyScores: { week: number; points: number; isPlayoffs: boolean }[];
   pointsForMax: number;
   pointsForAvg: number | null;
   efficiency: number | null;
