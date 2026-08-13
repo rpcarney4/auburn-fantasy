@@ -49,9 +49,14 @@ export function SeasonSummaryCard({ summary }: { summary: SeasonSummary }) {
               </p>
               <p className="text-xl font-bold">{champion?.name ?? "TBD"}</p>
               {champion && (
-                <p className="text-sm text-muted-foreground">
-                  {formatRecord(champion)}
-                </p>
+                <>
+                  {champion.username !== champion.name && (
+                    <p className="text-xs text-muted-foreground">{champion.username}</p>
+                  )}
+                  <p className="text-sm text-muted-foreground">
+                    {formatRecord(champion)}
+                  </p>
+                </>
               )}
             </CardContent>
           </Card>

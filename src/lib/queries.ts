@@ -30,6 +30,7 @@ export async function getLeagueSummary() {
 
 type SeasonExtremeTeam = {
   name: string;
+  username: string;
   wins: number;
   losses: number;
   ties: number;
@@ -75,6 +76,7 @@ export async function getSeasonSummaries(): Promise<SeasonSummary[]> {
     const slots = ROSTER_SLOTS[league.type];
     const toExtreme = (t: (typeof league.teams)[number]): SeasonExtremeTeam => ({
       name: t.teamName || t.user.displayName,
+      username: t.user.displayName,
       wins: t.wins,
       losses: t.losses,
       ties: t.ties,
