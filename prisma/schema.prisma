@@ -22,6 +22,11 @@ enum TradeAssetType {
   PICK
 }
 
+enum RosterTransactionType {
+  ADD
+  DROP
+}
+
 // One row per real person. Shared across both the dynasty and redraft leagues.
 model User {
   id          String  @id @default(cuid())
@@ -47,12 +52,13 @@ model League {
   // league isn't split into divisions.
   divisionNames   String[]   @default([])
 
-  teams            Team[]
-  games            Game[]
-  trades           Trade[]
-  draft            Draft?
-  playerWeekScores PlayerWeekScore[]
-  playoffMatches   PlayoffMatch[]
+  teams              Team[]
+  games              Game[]
+  trades             Trade[]
+  draft              Draft?
+  playerWeekScores   PlayerWeekScore[]
+  playoffMatches     PlayoffMatch[]
+  rosterTransactions RosterTransaction[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -82,15 +88,16 @@ model Team {
   pointsAgainst Float @default(0)
 
   roster                RosterPlayer[]
-  homeGames             Game[]            @relation("HomeTeam")
-  awayGames             Game[]            @relation("AwayTeam")
+  homeGames             Game[]              @relation("HomeTeam")
+  awayGames             Game[]              @relation("AwayTeam")
   draftPicksMade        DraftPick[]
-  tradeAssetsOut        TradeAsset[]      @relation("FromTeam")
-  tradeAssetsIn         TradeAsset[]      @relation("ToTeam")
+  tradeAssetsOut        TradeAsset[]        @relation("FromTeam")
+  tradeAssetsIn         TradeAsset[]        @relation("ToTeam")
   playerWeekScores      PlayerWeekScore[]
-  playoffMatchesAsTeam1 PlayoffMatch[]    @relation("PlayoffTeam1")
-  playoffMatchesAsTeam2 PlayoffMatch[]    @relation("PlayoffTeam2")
-  playoffMatchesWon     PlayoffMatch[]    @relation("PlayoffWinner")
+  playoffMatchesAsTeam1 PlayoffMatch[]      @relation("PlayoffTeam1")
+  playoffMatchesAsTeam2 PlayoffMatch[]      @relation("PlayoffTeam2")
+  playoffMatchesWon     PlayoffMatch[]      @relation("PlayoffWinner")
+  rosterTransactions    RosterTransaction[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -105,10 +112,11 @@ model Player {
   position String?
   nflTeam  String?
 
-  rosterSlots RosterPlayer[]
-  draftPicks  DraftPick[]
-  tradeAssets TradeAsset[]
-  weekScores  PlayerWeekScore[]
+  rosterSlots        RosterPlayer[]
+  draftPicks         DraftPick[]
+  tradeAssets        TradeAsset[]
+  weekScores         PlayerWeekScore[]
+  rosterTransactions RosterTransaction[]
 
   updatedAt DateTime @updatedAt
 }
@@ -116,21 +124,21 @@ model Player {
 // One player's fantasy score for one team in one week. Used to compute a
 // player's average score for a season on the Team page.
 model PlayerWeekScore {
-  id       String @id @default(cuid())
-  league   League @relation(fields: [leagueId], references: [id])
-  leagueId String
-  team     Team   @relation(fields: [teamId], references: [id])
-  teamId   String
-  player   Player @relation(fields: [playerId], references: [id])
-  playerId String
-  week     Int
-  points   Float
+  id        String  @id @default(cuid())
+  league    League  @relation(fields: [leagueId], references: [id])
+  leagueId  String
+  team      Team    @relation(fields: [teamId], references: [id])
+  teamId    String
+  player    Player  @relation(fields: [playerId], references: [id])
+  playerId  String
+  week      Int
+  points    Float
   // Whether this player was in the starting lineup for this team in this
   // specific week (independent of the current roster snapshot's isStarter).
   isStarter Boolean @default(false)
   // Raw per-category stats from Sleeper for this player-week (rec, rec_yd,
   // pass_td, etc.), used for box score breakdowns. Shape varies by position.
-  stats Json?
+  stats     Json?
 
   @@unique([teamId, playerId, week])
 }
@@ -172,30 +180,33 @@ model Game {
 // (1 = championship, 3 = third place, etc) and is null for non-deciding
 // rounds. Teams are null until Sleeper resolves who advances into that slot.
 model PlayoffMatch {
-  id           String  @id @default(cuid())
-  league       League  @relation(fields: [leagueId], references: [id])
-  leagueId     String
-  round        Int
-  matchNum     Int
-  placement    Int?
-  team1        Team?   @relation("PlayoffTeam1", fields: [team1Id], references: [id])
-  team1Id      String?
-  team1Score   Float?
-  team2        Team?   @relation("PlayoffTeam2", fields: [team2Id], references: [id])
-  team2Id      String?
-  team2Score   Float?
-  winner       Team?   @relation("PlayoffWinner", fields: [winnerId], references: [id])
-  winnerId     String?
+  id         String  @id @default(cuid())
+  league     League  @relation(fields: [leagueId], references: [id])
+  leagueId   String
+  round      Int
+  matchNum   Int
+  placement  Int?
+  team1      Team?   @relation("PlayoffTeam1", fields: [team1Id], references: [id])
+  team1Id    String?
+  team1Score Float?
+  team2      Team?   @relation("PlayoffTeam2", fields: [team2Id], references: [id])
+  team2Id    String?
+  team2Score Float?
+  winner     Team?   @relation("PlayoffWinner", fields: [winnerId], references: [id])
+  winnerId   String?
 
   @@unique([leagueId, round, matchNum])
 }
 
 model Draft {
-  id             String @id @default(cuid())
-  league         League @relation(fields: [leagueId], references: [id])
-  leagueId       String @unique
-  sleeperDraftId String @unique
+  id             String    @id @default(cuid())
+  league         League    @relation(fields: [leagueId], references: [id])
+  leagueId       String    @unique
+  sleeperDraftId String    @unique
   season         Int
+  // When the draft started, per Sleeper. Individual picks don't carry their
+  // own timestamp, so this stands in as "when" for transaction history.
+  startTime      DateTime?
 
   picks DraftPick[]
 }
@@ -243,4 +254,22 @@ model TradeAsset {
   fromTeamId      String
   toTeam          Team           @relation("ToTeam", fields: [toTeamId], references: [id])
   toTeamId        String
+}
+
+// A waiver claim, free agent add, or drop — the non-trade half of roster
+// moves. A single Sleeper transaction can produce both an ADD and a DROP
+// row (e.g. claiming a player off waivers and dropping another for space).
+model RosterTransaction {
+  id                   String                @id @default(cuid())
+  league               League                @relation(fields: [leagueId], references: [id])
+  leagueId             String
+  sleeperTransactionId String
+  team                 Team                  @relation(fields: [teamId], references: [id])
+  teamId               String
+  player               Player                @relation(fields: [playerId], references: [id])
+  playerId             String
+  type                 RosterTransactionType
+  transactionDate      DateTime
+
+  @@unique([sleeperTransactionId, playerId, type])
 }

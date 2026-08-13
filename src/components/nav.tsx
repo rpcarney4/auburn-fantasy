@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
@@ -29,9 +30,16 @@ export function Nav() {
 
   return (
     <header className="border-b">
-      <div className="mx-auto max-w-6xl px-4 sm:px-6">
+      <div className="px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between py-4">
-          <Link href="/" className="text-lg font-bold tracking-tight">
+          <Link href="/" className="flex items-center gap-2 text-lg font-bold tracking-tight">
+            <Image
+              src="/img/Auburn_Tigers_logo.svg"
+              alt="Auburn Tigers"
+              width={32}
+              height={28}
+              className="h-8 w-auto"
+            />
             AUB Fantasy
           </Link>
           <nav className="hidden flex-wrap gap-1 text-sm sm:flex">

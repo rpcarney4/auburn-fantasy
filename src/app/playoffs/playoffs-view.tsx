@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import {
   Select,
   SelectContent,
@@ -151,8 +152,14 @@ function MatchCard({
   match: PlayoffMatch;
   className?: string;
 }) {
-  return (
-    <div className={cn("flex flex-col gap-2 rounded-lg bg-muted/40 p-3", className)}>
+  const content = (
+    <div
+      className={cn(
+        "flex flex-col gap-2 rounded-lg bg-muted/40 p-3",
+        match.gameId &&
+          "transition-all duration-150 hover:-translate-y-1 hover:ring-2 hover:ring-primary hover:shadow-lg"
+      )}
+    >
       <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
         {match.label}
       </p>
@@ -167,6 +174,14 @@ function MatchCard({
         isWinner={!!match.team2 && match.winnerId === match.team2.id}
       />
     </div>
+  );
+
+  if (!match.gameId) return <div className={className}>{content}</div>;
+
+  return (
+    <Link href={`/game-log/${match.gameId}`} className={cn("block", className)}>
+      {content}
+    </Link>
   );
 }
 

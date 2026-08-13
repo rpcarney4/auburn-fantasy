@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/empty-state";
 import { SeasonSummaryCard } from "@/components/season-summary-card";
@@ -20,9 +21,14 @@ export default async function HomePage() {
   return (
     <div className="flex flex-col gap-8">
       <div className="flex flex-col items-center gap-4 py-8 text-center">
-        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary text-2xl font-bold text-primary-foreground">
-          AUB
-        </div>
+        <Image
+          src="/img/Auburn_Tigers_logo.svg"
+          alt="Auburn Tigers"
+          width={80}
+          height={71}
+          className="h-20 w-auto"
+          priority
+        />
         <h1 className="text-3xl font-bold tracking-tight">AUB Fantasy League</h1>
         <p className="max-w-lg text-muted-foreground">
           Home of the dynasty and redraft leagues — same 10 managers, two ways

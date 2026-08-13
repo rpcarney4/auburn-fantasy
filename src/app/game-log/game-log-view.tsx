@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Badge } from "@/components/ui/badge";
+import { Trophy } from "lucide-react";
 
 type Game = {
   id: string;
@@ -174,17 +175,31 @@ export function GameLogView({
                 <TableCell>{g.week}</TableCell>
                 <TableCell
                   className={
-                    g.homeScore > g.awayScore ? "font-semibold" : undefined
+                    g.homeScore > g.awayScore
+                      ? "font-semibold"
+                      : undefined
                   }
                 >
-                  {nameOf(g.homeTeam)}
+                  <span className="flex items-center gap-1.5">
+                    {g.homeScore > g.awayScore && (
+                      <Trophy className="size-3.5 shrink-0 text-amber-400" />
+                    )}
+                    {nameOf(g.homeTeam)}
+                  </span>
                 </TableCell>
                 <TableCell
                   className={
-                    g.awayScore > g.homeScore ? "font-semibold" : undefined
+                    g.awayScore > g.homeScore
+                      ? "font-semibold"
+                      : undefined
                   }
                 >
-                  {nameOf(g.awayTeam)}
+                  <span className="flex items-center gap-1.5">
+                    {g.awayScore > g.homeScore && (
+                      <Trophy className="size-3.5 shrink-0 text-amber-400" />
+                    )}
+                    {nameOf(g.awayTeam)}
+                  </span>
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {g.homeScore.toFixed(1)} – {g.awayScore.toFixed(1)}

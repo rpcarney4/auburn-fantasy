@@ -4,7 +4,12 @@
 //
 // Sleeper's API is public and read-only: https://docs.sleeper.com/
 
-import { LeagueType, Prisma, TradeAssetType } from "@prisma/client";
+import {
+  LeagueType,
+  Prisma,
+  RosterTransactionType,
+  TradeAssetType,
+} from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { prisma } from "../src/lib/prisma";
 import {
@@ -85,6 +90,11 @@ type SleeperDraftPick = {
   roster_id: number;
   player_id: string | null;
   is_keeper: boolean | null;
+};
+
+type SleeperDraft = {
+  draft_id: string;
+  start_time: number | null;
 };
 
 type SleeperTransaction = {
@@ -439,14 +449,22 @@ async function syncSeason(type: LeagueType, sleeperLeague: SleeperLeague) {
 
   // Draft
   if (sleeperLeague.draft_id) {
+    const sleeperDraft = await sleeperGet<SleeperDraft>(
+      `/draft/${sleeperLeague.draft_id}`
+    );
+    const startTime = sleeperDraft.start_time
+      ? new Date(sleeperDraft.start_time)
+      : null;
+
     const draft = await prisma.draft.upsert({
       where: { sleeperDraftId: sleeperLeague.draft_id },
       create: {
         sleeperDraftId: sleeperLeague.draft_id,
         leagueId: league.id,
         season,
+        startTime,
       },
-      update: { leagueId: league.id, season },
+      update: { leagueId: league.id, season, startTime },
     });
 
     const picks = await sleeperGet<SleeperDraftPick[]>(
@@ -479,13 +497,73 @@ async function syncSeason(type: LeagueType, sleeperLeague: SleeperLeague) {
     }
   }
 
-  // Trades
+  // Trades, waiver claims, free agent adds, and drops
   for (let week = 1; week <= MAX_WEEKS_PER_SEASON; week++) {
     const transactions = await sleeperGet<SleeperTransaction[]>(
       `/league/${sleeperLeague.league_id}/transactions/${week}`
     );
     for (const tx of transactions) {
-      if (tx.type !== "trade" || tx.status !== "complete") continue;
+      if (tx.status !== "complete") continue;
+
+      if (tx.type === "waiver" || tx.type === "free_agent") {
+        const adds = tx.adds ?? {};
+        const drops = tx.drops ?? {};
+        for (const [playerId, rosterId] of Object.entries(adds)) {
+          const teamId = teamIdByRosterId.get(rosterId);
+          if (!teamId) continue;
+          await ensurePlayer(playerId);
+          await prisma.rosterTransaction.upsert({
+            where: {
+              sleeperTransactionId_playerId_type: {
+                sleeperTransactionId: tx.transaction_id,
+                playerId,
+                type: RosterTransactionType.ADD,
+              },
+            },
+            create: {
+              sleeperTransactionId: tx.transaction_id,
+              leagueId: league.id,
+              teamId,
+              playerId,
+              type: RosterTransactionType.ADD,
+              transactionDate: new Date(tx.status_updated),
+            },
+            update: {
+              teamId,
+              transactionDate: new Date(tx.status_updated),
+            },
+          });
+        }
+        for (const [playerId, rosterId] of Object.entries(drops)) {
+          const teamId = teamIdByRosterId.get(rosterId);
+          if (!teamId) continue;
+          await ensurePlayer(playerId);
+          await prisma.rosterTransaction.upsert({
+            where: {
+              sleeperTransactionId_playerId_type: {
+                sleeperTransactionId: tx.transaction_id,
+                playerId,
+                type: RosterTransactionType.DROP,
+              },
+            },
+            create: {
+              sleeperTransactionId: tx.transaction_id,
+              leagueId: league.id,
+              teamId,
+              playerId,
+              type: RosterTransactionType.DROP,
+              transactionDate: new Date(tx.status_updated),
+            },
+            update: {
+              teamId,
+              transactionDate: new Date(tx.status_updated),
+            },
+          });
+        }
+        continue;
+      }
+
+      if (tx.type !== "trade") continue;
 
       const trade = await prisma.trade.upsert({
         where: { sleeperTransactionId: tx.transaction_id },

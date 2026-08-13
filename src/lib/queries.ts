@@ -313,6 +313,48 @@ function optimalWeekTotal(
   return total;
 }
 
+// Builds the roster-slot sequence for a league type, e.g. Redraft:
+// [QB, RB, RB, WR, WR, TE, FLEX, K, DEF]. Used to order a box score's
+// starters by roster slot rather than just by position.
+function buildSlotSequence(leagueType: LeagueType) {
+  const slots = ROSTER_SLOTS[leagueType];
+  const sequence: ((position: string | null) => boolean)[] = [];
+  const push = (n: number, predicate: (position: string | null) => boolean) => {
+    for (let i = 0; i < n; i++) sequence.push(predicate);
+  };
+  push(slots.QB, (p) => p === "QB");
+  push(slots.RB, (p) => p === "RB");
+  push(slots.WR, (p) => p === "WR");
+  push(slots.TE, (p) => p === "TE");
+  push(slots.FLEX, (p) => ["RB", "WR", "TE"].includes(p ?? ""));
+  push(slots.SFLEX, (p) => ["QB", "RB", "WR", "TE"].includes(p ?? ""));
+  push(slots.K, (p) => p === "K");
+  push(slots.DEF, (p) => p === "DEF");
+  return sequence;
+}
+
+// Orders actual starters by roster slot (QB1, RB1, RB2, ..., FLEX, ...)
+// rather than by position group. Since we only know who started, not which
+// literal slot (WR2 vs FLEX) they were in, each slot in sequence claims the
+// highest-scoring remaining eligible starter — a reasonable, deterministic
+// stand-in for the real (unrecorded) slot assignment.
+function orderStartersBySlot<T extends { position: string | null; points: number }>(
+  starters: T[],
+  leagueType: LeagueType
+): T[] {
+  const pool = starters.slice();
+  const ordered: T[] = [];
+  for (const isEligible of buildSlotSequence(leagueType)) {
+    const eligible = pool.filter((p) => isEligible(p.position)).sort((a, b) => b.points - a.points);
+    const pick = eligible[0];
+    if (!pick) continue;
+    ordered.push(pick);
+    pool.splice(pool.indexOf(pick), 1);
+  }
+  ordered.push(...pool); // any leftovers (shouldn't normally happen)
+  return ordered;
+}
+
 export async function getTeamDetail(userId: string) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) return null;
@@ -476,6 +518,204 @@ type TeamSeasonStats = {
 
 export type TeamDetail = NonNullable<Awaited<ReturnType<typeof getTeamDetail>>>;
 
+export type TeamTransaction = {
+  id: string;
+  leagueType: LeagueType;
+  season: number;
+  date: string;
+  kind: "TRADE_IN" | "TRADE_OUT" | "WAIVER_ADD" | "DROP" | "DRAFT_PICK";
+  assetName: string;
+  counterpartyTeamName: string | null;
+  pickLabel: string | null;
+};
+
+export async function getTeamTransactions(userId: string): Promise<TeamTransaction[]> {
+  const teams = await prisma.team.findMany({
+    where: { userId },
+    include: { league: true },
+  });
+  if (teams.length === 0) return [];
+
+  const teamIds = teams.map((t) => t.id);
+  const teamMeta = new Map(
+    teams.map((t) => [t.id, { leagueType: t.league.type, season: t.league.season }])
+  );
+
+  const [tradeAssets, draftPicks, rosterTransactions] = await Promise.all([
+    prisma.tradeAsset.findMany({
+      where: { OR: [{ fromTeamId: { in: teamIds } }, { toTeamId: { in: teamIds } }] },
+      include: {
+        trade: true,
+        player: true,
+        fromTeam: { include: { user: true } },
+        toTeam: { include: { user: true } },
+      },
+    }),
+    prisma.draftPick.findMany({
+      where: { teamId: { in: teamIds }, playerId: { not: null } },
+      include: { player: true, draft: true },
+    }).then(async (picks) => {
+      // Draft slot (e.g. "1.1") isn't stored directly — derive it from the
+      // overall pick number and how many teams are in round 1 of that draft.
+      const draftIds = [...new Set(picks.map((p) => p.draftId))];
+      const round1Counts = await prisma.draftPick.groupBy({
+        by: ["draftId"],
+        where: { draftId: { in: draftIds }, round: 1 },
+        _count: { _all: true },
+      });
+      const teamsPerDraft = new Map(
+        round1Counts.map((c) => [c.draftId, c._count._all])
+      );
+      return picks.map((p) => ({
+        ...p,
+        teamsPerRound: teamsPerDraft.get(p.draftId) ?? null,
+      }));
+    }),
+    prisma.rosterTransaction.findMany({
+      where: { teamId: { in: teamIds } },
+      include: { player: true },
+    }),
+  ]);
+
+  const rows: TeamTransaction[] = [];
+
+  for (const a of tradeAssets) {
+    const assetName = a.player?.fullName ?? a.pickDescription ?? "Unknown asset";
+    const isIncoming = teamIds.includes(a.toTeamId);
+    const meta = teamMeta.get(isIncoming ? a.toTeamId : a.fromTeamId);
+    if (!meta) continue;
+    rows.push({
+      id: a.id,
+      leagueType: meta.leagueType,
+      season: meta.season,
+      date: a.trade.tradeDate.toISOString(),
+      kind: isIncoming ? "TRADE_IN" : "TRADE_OUT",
+      assetName,
+      counterpartyTeamName: isIncoming
+        ? a.fromTeam.teamName || a.fromTeam.user.displayName
+        : a.toTeam.teamName || a.toTeam.user.displayName,
+      pickLabel: null,
+    });
+  }
+
+  for (const p of draftPicks) {
+    const meta = teamMeta.get(p.teamId);
+    if (!meta || !p.player || !p.draft.startTime) continue;
+    const slot = p.teamsPerRound
+      ? p.pickNo - (p.round - 1) * p.teamsPerRound
+      : null;
+    rows.push({
+      id: p.id,
+      leagueType: meta.leagueType,
+      season: meta.season,
+      date: p.draft.startTime.toISOString(),
+      kind: "DRAFT_PICK",
+      assetName: p.player.fullName,
+      counterpartyTeamName: null,
+      pickLabel: slot != null ? `Pick ${p.round}.${slot}` : null,
+    });
+  }
+
+  for (const r of rosterTransactions) {
+    const meta = teamMeta.get(r.teamId);
+    if (!meta) continue;
+    rows.push({
+      id: r.id,
+      leagueType: meta.leagueType,
+      season: meta.season,
+      date: r.transactionDate.toISOString(),
+      kind: r.type === "ADD" ? "WAIVER_ADD" : "DROP",
+      assetName: r.player.fullName,
+      counterpartyTeamName: null,
+      pickLabel: null,
+    });
+  }
+
+  return rows.sort(
+    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+  );
+}
+
+export type HeadToHeadRecord = {
+  opponentUserId: string;
+  opponentName: string;
+  wins: number;
+  losses: number;
+  ties: number;
+};
+
+// All-time record (regular season + playoffs, across every season of the
+// given league type) against every other owner this user has ever played.
+export async function getTeamHeadToHead(
+  userId: string
+): Promise<Record<LeagueType, HeadToHeadRecord[]>> {
+  const teams = await prisma.team.findMany({
+    where: { userId },
+    include: { league: true },
+  });
+  if (teams.length === 0) return { DYNASTY: [], REDRAFT: [] };
+
+  const teamIds = teams.map((t) => t.id);
+  const typeByTeamId = new Map(teams.map((t) => [t.id, t.league.type]));
+
+  const games = await prisma.game.findMany({
+    where: { OR: [{ homeTeamId: { in: teamIds } }, { awayTeamId: { in: teamIds } }] },
+    include: {
+      homeTeam: { include: { user: true } },
+      awayTeam: { include: { user: true } },
+    },
+    orderBy: [{ season: "asc" }, { week: "asc" }],
+  });
+
+  const recordsByType: Record<LeagueType, Map<string, HeadToHeadRecord>> = {
+    DYNASTY: new Map(),
+    REDRAFT: new Map(),
+  };
+
+  for (const g of games) {
+    // Sleeper pre-generates the full season's matchups with 0-0 placeholder
+    // scores before they're actually played.
+    if (g.homeScore === 0 && g.awayScore === 0) continue;
+
+    const isHome = teamIds.includes(g.homeTeamId);
+    const isAway = teamIds.includes(g.awayTeamId);
+    if (isHome === isAway) continue; // not one of ours, or somehow both
+
+    const type = typeByTeamId.get(isHome ? g.homeTeamId : g.awayTeamId);
+    if (!type) continue;
+
+    const myScore = isHome ? g.homeScore : g.awayScore;
+    const oppScore = isHome ? g.awayScore : g.homeScore;
+    const oppTeam = isHome ? g.awayTeam : g.homeTeam;
+    if (oppTeam.userId === userId) continue;
+
+    const map = recordsByType[type];
+    const record = map.get(oppTeam.userId) ?? {
+      opponentUserId: oppTeam.userId,
+      opponentName: oppTeam.user.displayName,
+      wins: 0,
+      losses: 0,
+      ties: 0,
+    };
+    record.opponentName = oppTeam.user.displayName;
+    if (myScore > oppScore) record.wins += 1;
+    else if (myScore < oppScore) record.losses += 1;
+    else record.ties += 1;
+    map.set(oppTeam.userId, record);
+  }
+
+  const sortRecords = (map: Map<string, HeadToHeadRecord>) =>
+    [...map.values()].sort((a, b) => {
+      const games = b.wins + b.losses + b.ties - (a.wins + a.losses + a.ties);
+      return games !== 0 ? games : b.wins - a.wins;
+    });
+
+  return {
+    DYNASTY: sortRecords(recordsByType.DYNASTY),
+    REDRAFT: sortRecords(recordsByType.REDRAFT),
+  };
+}
+
 // --- Draft history page -------------------------------------------------------
 
 export async function getAllDraftPicks(type: LeagueType) {
@@ -494,19 +734,27 @@ export async function getAllDraftPicks(type: LeagueType) {
 
 // --- Trade history page ---------------------------------------------------
 
-export type TradeAssetRow = {
+export type TradeCardAsset = {
   id: string;
-  tradeId: string;
-  season: number;
-  tradeDate: Date;
   label: string;
-  position: string;
-  fromTeam: string;
-  toTeam: string;
-  linkedLabels: string[];
+  position: string | null;
 };
 
-export async function getTradeAssetRows(): Promise<TradeAssetRow[]> {
+export type TradeCardTeam = {
+  teamId: string;
+  teamName: string;
+  incoming: TradeCardAsset[];
+  outgoing: TradeCardAsset[];
+};
+
+export type TradeCard = {
+  id: string;
+  season: number;
+  tradeDate: string;
+  teams: TradeCardTeam[];
+};
+
+export async function getTrades(): Promise<TradeCard[]> {
   const trades = await prisma.trade.findMany({
     include: {
       assets: {
@@ -520,32 +768,53 @@ export async function getTradeAssetRows(): Promise<TradeAssetRow[]> {
     orderBy: { tradeDate: "desc" },
   });
 
-  const rows: TradeAssetRow[] = [];
-  for (const trade of trades) {
+  return trades.map((trade) => {
     const labelOf = (asset: (typeof trade.assets)[number]) =>
       asset.assetType === "PLAYER"
         ? (asset.player?.fullName ?? "Unknown Player")
         : (asset.pickDescription ?? "Draft Pick");
+    const positionOf = (asset: (typeof trade.assets)[number]) =>
+      asset.assetType === "PLAYER" ? (asset.player?.position ?? null) : null;
+
+    const teamsById = new Map<string, TradeCardTeam>();
+    const ensureTeam = (id: string, name: string) => {
+      const existing = teamsById.get(id);
+      if (existing) return existing;
+      const created: TradeCardTeam = {
+        teamId: id,
+        teamName: name,
+        incoming: [],
+        outgoing: [],
+      };
+      teamsById.set(id, created);
+      return created;
+    };
 
     for (const asset of trade.assets) {
-      rows.push({
+      const fromTeam = ensureTeam(
+        asset.fromTeamId,
+        asset.fromTeam.teamName || asset.fromTeam.user.displayName
+      );
+      const toTeam = ensureTeam(
+        asset.toTeamId,
+        asset.toTeam.teamName || asset.toTeam.user.displayName
+      );
+      const item: TradeCardAsset = {
         id: asset.id,
-        tradeId: trade.id,
-        season: trade.season,
-        tradeDate: trade.tradeDate,
         label: labelOf(asset),
-        position: asset.assetType === "PLAYER"
-          ? (asset.player?.position ?? "—")
-          : "PICK",
-        fromTeam: asset.fromTeam.teamName || asset.fromTeam.user.displayName,
-        toTeam: asset.toTeam.teamName || asset.toTeam.user.displayName,
-        linkedLabels: trade.assets
-          .filter((a) => a.id !== asset.id)
-          .map(labelOf),
-      });
+        position: positionOf(asset),
+      };
+      toTeam.incoming.push(item);
+      fromTeam.outgoing.push(item);
     }
-  }
-  return rows;
+
+    return {
+      id: trade.id,
+      season: trade.season,
+      tradeDate: trade.tradeDate.toISOString(),
+      teams: [...teamsById.values()],
+    };
+  });
 }
 
 // --- Game log page ----------------------------------------------------------
@@ -641,6 +910,7 @@ export async function getBoxScore(gameId: string) {
   const game = await prisma.game.findUnique({
     where: { id: gameId },
     include: {
+      league: true,
       homeTeam: { include: { user: true } },
       awayTeam: { include: { user: true } },
     },
@@ -655,11 +925,10 @@ export async function getBoxScore(gameId: string) {
     include: { player: true },
   });
 
-  const compareBoxScoreEntries = (
-    a: { isStarter: boolean; position: string | null; points: number },
-    b: { isStarter: boolean; position: string | null; points: number }
+  const compareBenchEntries = (
+    a: { position: string | null; points: number },
+    b: { position: string | null; points: number }
   ) => {
-    if (a.isStarter !== b.isStarter) return a.isStarter ? -1 : 1;
     const rank = (position: string | null) => {
       const idx = position ? POSITION_ORDER.indexOf(position) : -1;
       return idx === -1 ? POSITION_ORDER.length : idx;
@@ -669,12 +938,9 @@ export async function getBoxScore(gameId: string) {
     return b.points - a.points;
   };
 
-  const buildTeam = (team: typeof game.homeTeam, score: number) => ({
-    id: team.id,
-    name: team.teamName || team.user.displayName,
-    score,
-    players: scores
-      .filter((s) => s.teamId === team.id)
+  const buildPlayers = (teamId: string) => {
+    const players = scores
+      .filter((s) => s.teamId === teamId)
       .map((s) => ({
         id: s.player.id,
         fullName: s.player.fullName,
@@ -685,17 +951,71 @@ export async function getBoxScore(gameId: string) {
           s.player.position,
           s.stats as Record<string, number> | null
         ),
-      }))
-      .sort(compareBoxScoreEntries),
-  });
+      }));
+    const starters = orderStartersBySlot(
+      players.filter((p) => p.isStarter),
+      game.league.type
+    );
+    const bench = players.filter((p) => !p.isStarter).sort(compareBenchEntries);
+    return [...starters, ...bench];
+  };
+
+  // Pairs each player against their opposite-team counterpart at the same
+  // slot (same starter/bench group, same position, same rank within it —
+  // e.g. Team A's top starting RB vs Team B's top starting RB), so the UI
+  // can mark whether that slot was won or lost.
+  const withMatchupResults = (
+    players: ReturnType<typeof buildPlayers>,
+    opponents: ReturnType<typeof buildPlayers>
+  ) => {
+    const slotKey = (p: (typeof players)[number]) => `${p.isStarter}:${p.position ?? ""}`;
+    const seen = new Map<string, number>();
+    const opponentSeen = new Map<string, number>();
+    const opponentsBySlot = new Map<string, (typeof opponents)[number]>();
+    for (const o of opponents) {
+      const key = slotKey(o);
+      const idx = opponentSeen.get(key) ?? 0;
+      opponentSeen.set(key, idx + 1);
+      opponentsBySlot.set(`${key}#${idx}`, o);
+    }
+
+    return players.map((p) => {
+      const key = slotKey(p);
+      const idx = seen.get(key) ?? 0;
+      seen.set(key, idx + 1);
+      const opponent = opponentsBySlot.get(`${key}#${idx}`);
+      const matchupResult =
+        opponent == null
+          ? null
+          : p.points > opponent.points
+            ? ("win" as const)
+            : p.points < opponent.points
+              ? ("loss" as const)
+              : ("tie" as const);
+      return { ...p, matchupResult };
+    });
+  };
+
+  const homePlayers = buildPlayers(game.homeTeamId);
+  const awayPlayers = buildPlayers(game.awayTeamId);
 
   return {
     id: game.id,
     season: game.season,
     week: game.week,
     isPlayoffs: game.isPlayoffs,
-    home: buildTeam(game.homeTeam, game.homeScore),
-    away: buildTeam(game.awayTeam, game.awayScore),
+    home: {
+      id: game.homeTeam.id,
+      name: game.homeTeam.teamName || game.homeTeam.user.displayName,
+      score: game.homeScore,
+      players: withMatchupResults(homePlayers, awayPlayers),
+    },
+    away: {
+      id: game.awayTeam.id,
+      name: game.awayTeam.teamName || game.awayTeam.user.displayName,
+      score: game.awayScore,
+      players: withMatchupResults(awayPlayers, homePlayers),
+    },
   };
 }
 
@@ -719,6 +1039,7 @@ type PlayoffMatchRow = {
   team2: { id: string; name: string } | null;
   team2Score: number | null;
   winnerId: string | null;
+  gameId: string | null;
 };
 
 export type PlayoffBracketNode = {
@@ -780,6 +1101,18 @@ export async function getPlayoffBracket(type: LeagueType) {
     });
     if (matches.length === 0) continue;
 
+    // Used to link each bracket tile to its box score. Matched by team pair
+    // rather than week, since we don't persist which week each round fell
+    // on for the bracket itself.
+    const playoffGames = await prisma.game.findMany({
+      where: { leagueId: league.id, isPlayoffs: true },
+    });
+    const gameIdByTeamPair = new Map<string, string>();
+    for (const g of playoffGames) {
+      const key = [g.homeTeamId, g.awayTeamId].sort().join(":");
+      gameIdByTeamPair.set(key, g.id);
+    }
+
     const rows: PlayoffMatchRow[] = matches.map((m) => ({
       id: m.id,
       round: m.round,
@@ -793,6 +1126,10 @@ export async function getPlayoffBracket(type: LeagueType) {
         : null,
       team2Score: m.team2Score,
       winnerId: m.winnerId,
+      gameId:
+        m.team1Id && m.team2Id
+          ? (gameIdByTeamPair.get([m.team1Id, m.team2Id].sort().join(":")) ?? null)
+          : null,
     }));
 
     bySeason[league.season] = buildBracketTree(rows);

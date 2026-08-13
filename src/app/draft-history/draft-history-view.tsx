@@ -104,9 +104,9 @@ function DraftBoard({ picks }: { picks: Pick[] }) {
   return (
     <div className="overflow-x-auto pb-2">
       <div
-        className="grid w-max gap-2"
+        className="grid w-full gap-2"
         style={{
-          gridTemplateColumns: `3rem repeat(${teamsPerRound}, minmax(150px, 1fr))`,
+          gridTemplateColumns: `3rem repeat(${teamsPerRound}, minmax(110px, 1fr))`,
         }}
       >
         {rounds.map((round) => (
