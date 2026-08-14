@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { BackButton } from "@/components/back-button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -12,6 +13,27 @@ import type { BoxScore } from "@/lib/queries";
 type TeamBox = BoxScore["home"];
 type PlayerBox = TeamBox["players"][number];
 
+// Sleeper serves NFL player headshots directly off their CDN, keyed by
+// their own player id — which is what Player.id already is for anyone
+// synced from Sleeper. Team defenses (id is a team abbreviation) and the
+// synthetic espn-* rows from the 2021/2022 ESPN import have no headshot.
+function playerHeadshotUrl(player: { id: string; position: string | null }): string | null {
+  if (player.position === "DEF") return null;
+  if (player.id.startsWith("espn-")) return null;
+  return `https://sleepercdn.com/content/nfl/players/thumb/${player.id}.jpg`;
+}
+
+// Square, stretches to match whatever height its flex siblings resolve to
+// (a single name line, or a name line plus the stats line beneath it) —
+// object-cover crops rather than distorting, so it never skews.
+function Headshot({ url }: { url: string | null }) {
+  return (
+    <div className="relative aspect-square shrink-0 self-stretch overflow-hidden rounded bg-muted">
+      {url && <Image src={url} alt="" fill sizes="48px" className="object-cover" />}
+    </div>
+  );
+}
+
 function PlayerTile({
   player,
   mirrored,
@@ -20,43 +42,34 @@ function PlayerTile({
   mirrored?: boolean;
 }) {
   const wonSlot = player.isStarter && player.matchupResult === "win";
-
-  const header = (
-    <div
-      className={cn(
-        "flex min-w-0 flex-1 items-center justify-between gap-2",
-        mirrored && "flex-row-reverse"
-      )}
-    >
-      <div
-        className={cn(
-          "flex min-w-0 items-center gap-1.5 sm:gap-2",
-          mirrored && "flex-row-reverse"
-        )}
-      >
-        <span className="w-6 shrink-0 text-[10px] font-medium text-muted-foreground sm:w-8 sm:text-xs">
-          {player.position ?? "—"}
-        </span>
-        <span className="truncate text-xs font-medium sm:text-sm">
-          {player.fullName}
-        </span>
-      </div>
-      <span className="shrink-0 text-xs font-semibold tabular-nums sm:text-sm">
-        {player.points.toFixed(1)}
-      </span>
-    </div>
-  );
-
+  const headshotUrl = playerHeadshotUrl(player);
   const hasStats = player.statLines.length > 0;
 
-  // Reserves one line of height even when there's nothing to show, so a
-  // scoreless player's card doesn't come out shorter than its neighbors on
-  // large screens, where the stats row is always visible.
-  const statsBlock = (
+  const positionBadge = (
+    <span className="w-6 shrink-0 self-center text-[10px] font-medium text-muted-foreground sm:w-8 sm:text-xs">
+      {player.position ?? "—"}
+    </span>
+  );
+  const nameLine = (
+    <span
+      className={cn(
+        "min-w-0 flex-1 truncate text-xs font-medium sm:text-sm",
+        mirrored && "text-right"
+      )}
+    >
+      {player.fullName}
+    </span>
+  );
+  const pointsLine = (
+    <span className="shrink-0 self-start text-xs font-semibold tabular-nums sm:text-sm">
+      {player.points.toFixed(1)}
+    </span>
+  );
+  const statsLine = (
     <div
       className={cn(
         "flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground sm:text-xs",
-        mirrored ? "pr-7.5 sm:pr-10" : "pl-7.5 sm:pl-10"
+        mirrored && "justify-end"
       )}
     >
       {hasStats ? (
@@ -71,6 +84,57 @@ function PlayerTile({
     </div>
   );
 
+  // Position, headshot, and name all on one line — used wherever stats
+  // aren't shown alongside the name (the collapsed mobile trigger, and any
+  // scoreless player with nothing to show).
+  const singleLineContent = (
+    <div
+      className={cn(
+        "flex min-w-0 flex-1 items-stretch justify-between gap-2",
+        mirrored && "flex-row-reverse"
+      )}
+    >
+      <div
+        className={cn(
+          "flex min-w-0 flex-1 items-stretch gap-1.5 sm:gap-2",
+          mirrored && "flex-row-reverse"
+        )}
+      >
+        {positionBadge}
+        <Headshot url={headshotUrl} />
+        {nameLine}
+      </div>
+      {pointsLine}
+    </div>
+  );
+
+  // Position and headshot beside a name+stats stack — the headshot
+  // stretches (aspect-square + self-stretch) to span from the top of the
+  // name line down to the bottom of the stats line beneath it.
+  const twoLineContent = (
+    <div
+      className={cn(
+        "flex min-w-0 flex-1 items-stretch justify-between gap-2",
+        mirrored && "flex-row-reverse"
+      )}
+    >
+      <div
+        className={cn(
+          "flex min-w-0 flex-1 items-stretch gap-1.5 sm:gap-2",
+          mirrored && "flex-row-reverse"
+        )}
+      >
+        {positionBadge}
+        <Headshot url={headshotUrl} />
+        <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5">
+          {nameLine}
+          {statsLine}
+        </div>
+      </div>
+      {pointsLine}
+    </div>
+  );
+
   if (!hasStats) {
     return (
       <>
@@ -82,7 +146,7 @@ function PlayerTile({
             wonSlot && "border-amber-400"
           )}
         >
-          {header}
+          {singleLineContent}
         </div>
 
         {/* Large screens: match the height of tiles that do have stats. */}
@@ -93,8 +157,7 @@ function PlayerTile({
             wonSlot && "border-amber-400"
           )}
         >
-          {header}
-          <div className="mt-1.5">{statsBlock}</div>
+          {twoLineContent}
         </div>
       </>
     );
@@ -114,10 +177,12 @@ function PlayerTile({
       >
         <AccordionItem value={player.id} className="border-none">
           <AccordionTrigger className="px-2 py-2 hover:no-underline sm:px-3 sm:py-2.5">
-            {header}
+            {singleLineContent}
           </AccordionTrigger>
           <AccordionContent className="px-2 pb-2 sm:px-3 sm:pb-2.5">
-            {statsBlock}
+            <div className={cn(mirrored ? "pr-7.5 sm:pr-10" : "pl-7.5 sm:pl-10")}>
+              {statsLine}
+            </div>
           </AccordionContent>
         </AccordionItem>
       </Accordion>
@@ -130,8 +195,7 @@ function PlayerTile({
           wonSlot && "border-amber-400"
         )}
       >
-        {header}
-        <div className="mt-1.5">{statsBlock}</div>
+        {twoLineContent}
       </div>
     </>
   );
