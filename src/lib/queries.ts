@@ -156,27 +156,43 @@ export type LeagueGlanceRivalry = {
   ties: number;
 } | null;
 
+// A ranked list of every entrant for a glance category, for tooltips —
+// entries are pre-formatted display strings, already in rank order.
+export type LeagueGlanceRankingEntry = { name: string; value: string };
+
 export type LeagueGlance = {
   mostPointsScored: LeagueGlanceStat;
+  mostPointsScoredRanking: LeagueGlanceRankingEntry[];
   leastPointsScored: LeagueGlanceStat;
   leagueHole: LeagueGlanceStat;
+  leagueHoleRanking: LeagueGlanceRankingEntry[];
   bestManager: LeagueGlanceRecord;
+  bestManagerRanking: LeagueGlanceRankingEntry[];
   worstManager: LeagueGlanceRecord;
   hoarder: LeagueGlanceStat;
+  hoarderRanking: LeagueGlanceRankingEntry[];
   skillDiff: LeagueGlanceStat;
+  skillDiffRanking: LeagueGlanceRankingEntry[];
   whosYourDaddy: LeagueGlanceRivalry;
+  whosYourDaddyRanking: LeagueGlanceRankingEntry[];
   placements: LeaguePlacement[];
 };
 
 const EMPTY_LEAGUE_GLANCE: LeagueGlance = {
   mostPointsScored: null,
+  mostPointsScoredRanking: [],
   leastPointsScored: null,
   leagueHole: null,
+  leagueHoleRanking: [],
   bestManager: null,
+  bestManagerRanking: [],
   worstManager: null,
   hoarder: null,
+  hoarderRanking: [],
   skillDiff: null,
+  skillDiffRanking: [],
   whosYourDaddy: null,
+  whosYourDaddyRanking: [],
   placements: [],
 };
 
@@ -257,6 +273,22 @@ export async function getLeagueGlance(type: LeagueType): Promise<LeagueGlance> {
     }
   }
 
+  const whosYourDaddyRanking: LeagueGlanceRankingEntry[] = [...pairs.values()]
+    .map((rec) => {
+      const aIsDominant = rec.aWins >= rec.bWins;
+      const dominantName = nameByUserId.get(aIsDominant ? rec.userAId : rec.userBId) ?? "Unknown";
+      const submissiveName = nameByUserId.get(aIsDominant ? rec.userBId : rec.userAId) ?? "Unknown";
+      const wins = aIsDominant ? rec.aWins : rec.bWins;
+      const losses = aIsDominant ? rec.bWins : rec.aWins;
+      return {
+        diff: Math.abs(rec.aWins - rec.bWins),
+        name: `${dominantName} vs ${submissiveName}`,
+        value: `${wins}-${losses}${rec.ties ? `-${rec.ties}` : ""}`,
+      };
+    })
+    .sort((a, b) => b.diff - a.diff)
+    .map(({ name, value }) => ({ name, value }));
+
   type Totals = {
     userId: string;
     name: string;
@@ -318,6 +350,34 @@ export async function getLeagueGlance(type: LeagueType): Promise<LeagueGlance> {
   const worstManager = minBy(activeTotals, winPct);
   const skillDiff = maxBy(activeTotals, (t) => t.pointsAgainst - t.pointsFor);
 
+  const rankingBy = (
+    score: (t: Totals) => number,
+    format: (t: Totals) => string
+  ): LeagueGlanceRankingEntry[] =>
+    [...activeTotals]
+      .sort((a, b) => score(b) - score(a))
+      .map((t) => ({ name: t.name, value: format(t) }));
+
+  const mostPointsScoredRanking = rankingBy(
+    (t) => t.pointsFor,
+    (t) => `${t.pointsFor.toFixed(1)} pts`
+  );
+  const leagueHoleRanking = rankingBy(
+    (t) => t.pointsAgainst,
+    (t) => `${t.pointsAgainst.toFixed(1)} pts against`
+  );
+  const bestManagerRanking = rankingBy(
+    winPct,
+    (t) => `${t.wins}-${t.losses}${t.ties ? `-${t.ties}` : ""}`
+  );
+  const skillDiffRanking = rankingBy(
+    (t) => t.pointsAgainst - t.pointsFor,
+    (t) => {
+      const diff = t.pointsAgainst - t.pointsFor;
+      return `${diff >= 0 ? "-" : "+"}${Math.abs(diff).toFixed(1)} point differential`;
+    }
+  );
+
   // The Hoarder: most waiver/free-agent adds across every season.
   const teamIds = teams.map((t) => t.id);
   const claimCounts =
@@ -344,6 +404,13 @@ export async function getLeagueGlance(type: LeagueType): Promise<LeagueGlance> {
     if (!totals) continue;
     if (!hoarder || count > hoarder.value) hoarder = { name: totals.name, value: count };
   }
+  const hoarderRanking: LeagueGlanceRankingEntry[] = activeTotals
+    .map((t) => ({ name: t.name, count: claimsByUser.get(t.userId) ?? 0 }))
+    .sort((a, b) => b.count - a.count)
+    .map(({ name, count }) => ({
+      name,
+      value: `${count} claim${count === 1 ? "" : "s"}`,
+    }));
 
   // Average final placement, completed seasons only (i.e. not the current,
   // still-in-progress one). Placement = rank within that season's
@@ -384,12 +451,14 @@ export async function getLeagueGlance(type: LeagueType): Promise<LeagueGlance> {
     mostPointsScored: mostPointsScored
       ? { name: mostPointsScored.name, value: mostPointsScored.pointsFor }
       : null,
+    mostPointsScoredRanking,
     leastPointsScored: leastPointsScored
       ? { name: leastPointsScored.name, value: leastPointsScored.pointsFor }
       : null,
     leagueHole: leagueHole
       ? { name: leagueHole.name, value: leagueHole.pointsAgainst }
       : null,
+    leagueHoleRanking,
     bestManager: bestManager
       ? {
           name: bestManager.name,
@@ -398,6 +467,7 @@ export async function getLeagueGlance(type: LeagueType): Promise<LeagueGlance> {
           ties: bestManager.ties,
         }
       : null,
+    bestManagerRanking,
     worstManager: worstManager
       ? {
           name: worstManager.name,
@@ -407,10 +477,13 @@ export async function getLeagueGlance(type: LeagueType): Promise<LeagueGlance> {
         }
       : null,
     hoarder,
+    hoarderRanking,
     skillDiff: skillDiff
       ? { name: skillDiff.name, value: skillDiff.pointsAgainst - skillDiff.pointsFor }
       : null,
+    skillDiffRanking,
     whosYourDaddy,
+    whosYourDaddyRanking,
     placements,
   };
 }
