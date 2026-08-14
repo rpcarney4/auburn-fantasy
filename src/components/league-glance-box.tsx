@@ -4,7 +4,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import type { LeagueGlance, LeagueGlanceRankingEntry, LeaguePlacement } from "@/lib/queries";
+import type {
+  LeagueGlance,
+  LeagueGlanceGame,
+  LeagueGlanceRankingEntry,
+  LeaguePlacement,
+} from "@/lib/queries";
 
 function formatRecord(r: { wins: number; losses: number; ties: number }) {
   return `${r.wins}-${r.losses}${r.ties ? `-${r.ties}` : ""}`;
@@ -45,6 +50,32 @@ function PlacementList({
         </li>
       ))}
     </ul>
+  );
+}
+
+function GameList({ games }: { games: LeagueGlanceGame[] }) {
+  if (games.length === 0) {
+    return <p className="text-sm text-muted-foreground">No games yet.</p>;
+  }
+
+  return (
+    <ol className="flex flex-col gap-2 text-sm">
+      {games.map((g, i) => (
+        <li key={i} className="flex items-start justify-between gap-2">
+          <span className="truncate">
+            {i + 1}. {g.winnerName} vs {g.loserName}
+          </span>
+          <span className="shrink-0 text-right tabular-nums text-muted-foreground">
+            <div>
+              {g.winnerScore.toFixed(1)} - {g.loserScore.toFixed(1)}
+            </div>
+            <div className="text-[11px]">
+              {g.season} Wk {g.week}
+            </div>
+          </span>
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -196,6 +227,21 @@ export function LeagueGlanceBox({
           ) : (
             <PlacementColumns placements={glance.placements} />
           )}
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="rounded-lg bg-muted/50 p-3">
+            <p className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+              Historical Blowouts
+            </p>
+            <GameList games={glance.historicalBlowouts} />
+          </div>
+          <div className="rounded-lg bg-muted/50 p-3">
+            <p className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+              Historical Tard-Offs
+            </p>
+            <GameList games={glance.historicalTardOffs} />
+          </div>
         </div>
       </CardContent>
     </Card>
