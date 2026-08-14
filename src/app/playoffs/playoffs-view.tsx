@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import {
   Select,
   SelectContent,
@@ -10,18 +9,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { cn } from "@/lib/utils";
-import type { getPlayoffBracket, PlayoffBracketNode } from "@/lib/queries";
-
-type Bracket = Awaited<ReturnType<typeof getPlayoffBracket>>;
-type PlayoffMatch = PlayoffBracketNode["match"];
+import type { PlayoffBracket } from "@/lib/types";
+import { BracketNodeView } from "./bracket-node-view";
+import { MatchCard } from "./match-card";
 
 export function PlayoffsView({
   dynasty,
   redraft,
 }: {
-  dynasty: Bracket;
-  redraft: Bracket;
+  dynasty: PlayoffBracket;
+  redraft: PlayoffBracket;
 }) {
   const [view, setView] = useState<"DYNASTY" | "REDRAFT">("DYNASTY");
   const bracket = view === "DYNASTY" ? dynasty : redraft;
@@ -94,114 +91,6 @@ export function PlayoffsView({
           )}
         </div>
       )}
-    </div>
-  );
-}
-
-function BracketNodeView({ node }: { node: PlayoffBracketNode }) {
-  const { match, team1Feeder, team2Feeder } = node;
-
-  if (!team1Feeder && !team2Feeder) {
-    return <MatchCard match={match} className="w-52" />;
-  }
-
-  return (
-    <div className="flex items-stretch">
-      <div className="flex flex-col justify-around gap-8">
-        {team1Feeder ? (
-          <BracketNodeView node={team1Feeder} />
-        ) : (
-          <ByeSlot />
-        )}
-        {team2Feeder ? (
-          <BracketNodeView node={team2Feeder} />
-        ) : (
-          <ByeSlot />
-        )}
-      </div>
-      <BracketConnector />
-      <div className="flex items-center">
-        <MatchCard match={match} className="w-52" />
-      </div>
-    </div>
-  );
-}
-
-function BracketConnector() {
-  return (
-    <div className="relative w-6 shrink-0 self-stretch">
-      <div className="absolute top-1/4 bottom-1/4 right-0 w-px bg-border" />
-      <div className="absolute top-1/4 right-0 h-px w-6 bg-border" />
-      <div className="absolute bottom-1/4 right-0 h-px w-6 bg-border" />
-    </div>
-  );
-}
-
-function ByeSlot() {
-  return (
-    <div className="flex w-52 items-center justify-center rounded-lg border border-dashed border-foreground/15 p-3 text-xs text-muted-foreground">
-      Bye
-    </div>
-  );
-}
-
-function MatchCard({
-  match,
-  className,
-}: {
-  match: PlayoffMatch;
-  className?: string;
-}) {
-  const content = (
-    <div
-      className={cn(
-        "flex flex-col gap-2 rounded-lg bg-muted/40 p-3",
-        match.gameId &&
-          "transition-all duration-150 hover:-translate-y-1 hover:ring-2 hover:ring-primary hover:shadow-lg"
-      )}
-    >
-      <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-        {match.label}
-      </p>
-      <MatchTeamRow
-        name={match.team1?.name}
-        score={match.team1Score}
-        isWinner={!!match.team1 && match.winnerId === match.team1.id}
-      />
-      <MatchTeamRow
-        name={match.team2?.name}
-        score={match.team2Score}
-        isWinner={!!match.team2 && match.winnerId === match.team2.id}
-      />
-    </div>
-  );
-
-  if (!match.gameId) return <div className={className}>{content}</div>;
-
-  return (
-    <Link href={`/game-log/${match.gameId}`} className={cn("block", className)}>
-      {content}
-    </Link>
-  );
-}
-
-function MatchTeamRow({
-  name,
-  score,
-  isWinner,
-}: {
-  name: string | undefined;
-  score: number | null;
-  isWinner: boolean;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-2">
-      <span className={cn("truncate text-sm", isWinner && "font-semibold")}>
-        {name ?? "TBD"}
-      </span>
-      <span className={cn("tabular-nums text-sm", isWinner && "font-semibold")}>
-        {score != null ? score.toFixed(1) : "—"}
-      </span>
     </div>
   );
 }

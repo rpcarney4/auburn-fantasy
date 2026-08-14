@@ -20,27 +20,7 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Badge } from "@/components/ui/badge";
 import { Trophy } from "lucide-react";
-
-type Game = {
-  id: string;
-  season: number;
-  week: number;
-  isPlayoffs: boolean;
-  homeScore: number;
-  awayScore: number;
-  homeTeam: {
-    userId: string;
-    teamName: string | null;
-    user: { displayName: string };
-  };
-  awayTeam: {
-    userId: string;
-    teamName: string | null;
-    user: { displayName: string };
-  };
-};
-
-type TeamOption = { userId: string; label: string };
+import type { GameLogGame, TeamOption } from "@/lib/types";
 
 const ALL = "__all__";
 
@@ -50,8 +30,8 @@ export function GameLogView({
   dynastyTeams,
   redraftTeams,
 }: {
-  dynastyGames: Game[];
-  redraftGames: Game[];
+  dynastyGames: GameLogGame[];
+  redraftGames: GameLogGame[];
   dynastyTeams: TeamOption[];
   redraftTeams: TeamOption[];
 }) {
@@ -97,7 +77,7 @@ export function GameLogView({
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }, [view, season, teamFilter, pathname, router]);
 
-  const nameOf = (t: Game["homeTeam"]) => t.teamName || t.user.displayName;
+  const nameOf = (t: GameLogGame["homeTeam"]) => t.teamName || t.user.displayName;
 
   return (
     <div className="flex flex-col gap-6">

@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -11,8 +10,8 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { cn } from "@/lib/utils";
-import type { TradeCard, TradeCardAsset } from "@/lib/queries";
+import type { TradeCard, TradeCardAsset } from "@/lib/types";
+import { TradeHistoryCard } from "./trade-history-card";
 
 const ALL = "__all__";
 const PICK = "PICK";
@@ -160,78 +159,5 @@ export function TradeHistoryView({
         </div>
       )}
     </div>
-  );
-}
-
-function TradeHistoryCard({ trade }: { trade: TradeCard }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">
-          {new Date(trade.tradeDate).toLocaleDateString(undefined, {
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-          })}
-        </CardTitle>
-      </CardHeader>
-      <CardContent
-        className={cn(
-          "grid gap-6",
-          trade.teams.length > 1 ? "sm:grid-cols-2" : "grid-cols-1"
-        )}
-      >
-        {trade.teams.map((team) => (
-          <TradeTeamColumn key={team.teamId} team={team} />
-        ))}
-      </CardContent>
-    </Card>
-  );
-}
-
-function TradeTeamColumn({
-  team,
-}: {
-  team: TradeCard["teams"][number];
-}) {
-  return (
-    <div className="flex flex-col gap-2">
-      <p className="text-sm font-semibold">{team.teamName}</p>
-      <ul className="flex flex-col gap-1.5 text-sm">
-        {team.incoming.map((a) => (
-          <AssetRow key={`in-${a.id}`} asset={a} isIncoming />
-        ))}
-        {team.outgoing.map((a) => (
-          <AssetRow key={`out-${a.id}`} asset={a} isIncoming={false} />
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function AssetRow({
-  asset,
-  isIncoming,
-}: {
-  asset: TradeCardAsset;
-  isIncoming: boolean;
-}) {
-  return (
-    <li className="flex items-center gap-2 rounded-lg bg-muted/40 px-3 py-2">
-      <span
-        className={cn(
-          "w-3 shrink-0 text-base font-bold",
-          isIncoming ? "text-green-500" : "text-red-500"
-        )}
-      >
-        {isIncoming ? "+" : "−"}
-      </span>
-      <span className="min-w-0 flex-1 truncate">{asset.label}</span>
-      {asset.position && (
-        <span className="shrink-0 text-xs text-muted-foreground">
-          {asset.position}
-        </span>
-      )}
-    </li>
   );
 }
