@@ -160,6 +160,15 @@ export type LeagueGlanceRivalry = {
 // entries are pre-formatted display strings, already in rank order.
 export type LeagueGlanceRankingEntry = { name: string; value: string };
 
+export type LeagueGlanceGame = {
+  winnerName: string;
+  loserName: string;
+  winnerScore: number;
+  loserScore: number;
+  season: number;
+  week: number;
+};
+
 export type LeagueGlance = {
   mostPointsScored: LeagueGlanceStat;
   mostPointsScoredRanking: LeagueGlanceRankingEntry[];
@@ -176,6 +185,8 @@ export type LeagueGlance = {
   whosYourDaddy: LeagueGlanceRivalry;
   whosYourDaddyRanking: LeagueGlanceRankingEntry[];
   placements: LeaguePlacement[];
+  historicalBlowouts: LeagueGlanceGame[];
+  historicalTardOffs: LeagueGlanceGame[];
 };
 
 const EMPTY_LEAGUE_GLANCE: LeagueGlance = {
@@ -194,6 +205,8 @@ const EMPTY_LEAGUE_GLANCE: LeagueGlance = {
   whosYourDaddy: null,
   whosYourDaddyRanking: [],
   placements: [],
+  historicalBlowouts: [],
+  historicalTardOffs: [],
 };
 
 // Career-spanning stats for the "Leagues at a Glance" boxes on the home
@@ -288,6 +301,33 @@ export async function getLeagueGlance(type: LeagueType): Promise<LeagueGlance> {
     })
     .sort((a, b) => b.diff - a.diff)
     .map(({ name, value }) => ({ name, value }));
+
+  const toGlanceGame = (g: (typeof games)[number]): LeagueGlanceGame => {
+    const homeTeamName = g.homeTeam.teamName || g.homeTeam.user.displayName;
+    const awayTeamName = g.awayTeam.teamName || g.awayTeam.user.displayName;
+    const homeWon = g.homeScore >= g.awayScore;
+    return {
+      winnerName: homeWon ? homeTeamName : awayTeamName,
+      loserName: homeWon ? awayTeamName : homeTeamName,
+      winnerScore: homeWon ? g.homeScore : g.awayScore,
+      loserScore: homeWon ? g.awayScore : g.homeScore,
+      season: g.season,
+      week: g.week,
+    };
+  };
+
+  const historicalBlowouts = [...games]
+    .sort(
+      (a, b) =>
+        Math.abs(b.homeScore - b.awayScore) - Math.abs(a.homeScore - a.awayScore)
+    )
+    .slice(0, 5)
+    .map(toGlanceGame);
+
+  const historicalTardOffs = [...games]
+    .sort((a, b) => a.homeScore + a.awayScore - (b.homeScore + b.awayScore))
+    .slice(0, 5)
+    .map(toGlanceGame);
 
   type Totals = {
     userId: string;
@@ -485,6 +525,8 @@ export async function getLeagueGlance(type: LeagueType): Promise<LeagueGlance> {
     whosYourDaddy,
     whosYourDaddyRanking,
     placements,
+    historicalBlowouts,
+    historicalTardOffs,
   };
 }
 
