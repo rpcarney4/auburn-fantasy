@@ -46,7 +46,7 @@ export function DraftTile({
         </span>
       </div>
       <span className="truncate text-[11px] text-muted-foreground">
-        {pick.team.teamName || pick.team.user.displayName}
+        {pick.team.user.displayName}
       </span>
     </div>
   );

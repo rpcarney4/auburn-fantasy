@@ -79,11 +79,11 @@ export async function getPlayoffBracket(type: LeagueType) {
       round: m.round,
       label: playoffRoundLabel(m.placement, m.round),
       team1: m.team1
-        ? { id: m.team1.id, name: m.team1.teamName || m.team1.user.displayName }
+        ? { id: m.team1.id, name: m.team1.user.displayName }
         : null,
       team1Score: m.team1Score,
       team2: m.team2
-        ? { id: m.team2.id, name: m.team2.teamName || m.team2.user.displayName }
+        ? { id: m.team2.id, name: m.team2.user.displayName }
         : null,
       team2Score: m.team2Score,
       winnerId: m.winnerId,

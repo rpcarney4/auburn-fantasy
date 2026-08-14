@@ -40,14 +40,8 @@ export async function getTrades(type: LeagueType): Promise<TradeCard[]> {
     };
 
     for (const asset of trade.assets) {
-      const fromTeam = ensureTeam(
-        asset.fromTeamId,
-        asset.fromTeam.teamName || asset.fromTeam.user.displayName
-      );
-      const toTeam = ensureTeam(
-        asset.toTeamId,
-        asset.toTeam.teamName || asset.toTeam.user.displayName
-      );
+      const fromTeam = ensureTeam(asset.fromTeamId, asset.fromTeam.user.displayName);
+      const toTeam = ensureTeam(asset.toTeamId, asset.toTeam.user.displayName);
       const item: TradeCardAsset = {
         id: asset.id,
         label: labelOf(asset),

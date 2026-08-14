@@ -77,7 +77,7 @@ export function GameLogView({
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }, [view, season, teamFilter, pathname, router]);
 
-  const nameOf = (t: GameLogGame["homeTeam"]) => t.teamName || t.user.displayName;
+  const nameOf = (t: GameLogGame["homeTeam"]) => t.user.displayName;
 
   return (
     <div className="flex flex-col gap-6">

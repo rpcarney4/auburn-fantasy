@@ -210,13 +210,13 @@ export async function getBoxScore(gameId: string) {
     isPlayoffs: game.isPlayoffs,
     home: {
       id: game.homeTeam.id,
-      name: game.homeTeam.teamName || game.homeTeam.user.displayName,
+      name: game.homeTeam.user.displayName,
       score: game.homeScore,
       players: withMatchupResults(homePlayers, awayPlayers),
     },
     away: {
       id: game.awayTeam.id,
-      name: game.awayTeam.teamName || game.awayTeam.user.displayName,
+      name: game.awayTeam.user.displayName,
       score: game.awayScore,
       players: withMatchupResults(awayPlayers, homePlayers),
     },

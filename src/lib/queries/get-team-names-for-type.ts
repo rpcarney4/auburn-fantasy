@@ -10,6 +10,6 @@ export async function getTeamNamesForType(type: LeagueType) {
   });
   return teams.map((t) => ({
     userId: t.userId,
-    label: t.teamName || t.user.displayName,
+    label: t.user.displayName,
   }));
 }

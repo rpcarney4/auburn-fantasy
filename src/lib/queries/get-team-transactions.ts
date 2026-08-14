@@ -64,8 +64,8 @@ export async function getTeamTransactions(userId: string): Promise<TeamTransacti
       kind: isIncoming ? "TRADE_IN" : "TRADE_OUT",
       assetName,
       counterpartyTeamName: isIncoming
-        ? a.fromTeam.teamName || a.fromTeam.user.displayName
-        : a.toTeam.teamName || a.toTeam.user.displayName,
+        ? a.fromTeam.user.displayName
+        : a.toTeam.user.displayName,
       pickLabel: null,
     });
   }

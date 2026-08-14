@@ -140,8 +140,8 @@ export async function getLeagueGlance(type: LeagueType): Promise<LeagueGlance> {
     .map(({ name, value }) => ({ name, value }));
 
   const toGlanceGame = (g: (typeof games)[number]): LeagueGlanceGame => {
-    const homeTeamName = g.homeTeam.teamName || g.homeTeam.user.displayName;
-    const awayTeamName = g.awayTeam.teamName || g.awayTeam.user.displayName;
+    const homeTeamName = g.homeTeam.user.displayName;
+    const awayTeamName = g.awayTeam.user.displayName;
     const homeWon = g.homeScore >= g.awayScore;
     return {
       winnerName: homeWon ? homeTeamName : awayTeamName,
