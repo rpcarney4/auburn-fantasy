@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { LeagueType } from "@prisma/client";
 import { BackButton } from "@/components/back-button";
 import { Badge } from "@/components/ui/badge";
@@ -26,15 +27,26 @@ export function TeamDetailView({
   headToHead: Record<LeagueType, HeadToHeadRecord[]>;
 }) {
   const { user, seasons } = detail;
+  const searchParams = useSearchParams();
 
   const availableTypes = useMemo(
     () => [...new Set(seasons.map((s) => s.leagueType))],
     [seasons]
   );
 
-  const [view, setView] = useState<LeagueType>(
-    availableTypes[0] ?? LeagueType.DYNASTY
-  );
+  // Respect the league type the user came from (e.g. clicking a team card
+  // on the Teams page while toggled to Redraft) rather than always
+  // defaulting to whichever type happens to sort first.
+  const [view, setView] = useState<LeagueType>(() => {
+    const param = searchParams.get("view");
+    if (
+      (param === LeagueType.DYNASTY || param === LeagueType.REDRAFT) &&
+      availableTypes.includes(param)
+    ) {
+      return param;
+    }
+    return availableTypes[0] ?? LeagueType.DYNASTY;
+  });
 
   // Scoped to the selected league type, unlike detail.career which combines
   // dynasty and redraft.
@@ -58,9 +70,14 @@ export function TeamDetailView({
     [seasons, view]
   );
 
-  const [season, setSeason] = useState<number | undefined>(
-    seasonsForType[0]?.season
-  );
+  const [season, setSeason] = useState<number | undefined>(() => {
+    const param = searchParams.get("season");
+    const parsed = param ? Number(param) : undefined;
+    if (parsed !== undefined && seasonsForType.some((s) => s.season === parsed)) {
+      return parsed;
+    }
+    return seasonsForType[0]?.season;
+  });
   const activeSeason =
     seasonsForType.find((s) => s.season === season) ?? seasonsForType[0];
 

@@ -5,7 +5,17 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { RosterPlayer, TeamData } from "@/lib/types";
 
-export function TeamCard({ team, isHistorical }: { team: TeamData; isHistorical: boolean }) {
+export function TeamCard({
+  team,
+  isHistorical,
+  leagueType,
+  season,
+}: {
+  team: TeamData;
+  isHistorical: boolean;
+  leagueType: "DYNASTY" | "REDRAFT";
+  season: number;
+}) {
   const renderPlayer = (
     list: RosterPlayer[],
     r: RosterPlayer,
@@ -33,7 +43,10 @@ export function TeamCard({ team, isHistorical }: { team: TeamData; isHistorical:
   );
 
   return (
-    <Link href={`/team/${team.user.id}`} className="block rounded-xl">
+    <Link
+      href={`/team/${team.user.id}?view=${leagueType}&season=${season}`}
+      className="block rounded-xl"
+    >
       <Card className="h-full transition-all duration-150 hover:-translate-y-1 hover:ring-2 hover:ring-primary hover:shadow-lg">
         <CardHeader>
           <CardTitle className="flex items-center justify-between text-base">

@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import {
   getTeamDetail,
@@ -36,10 +37,12 @@ export default async function TeamDetailPage({
   }
 
   return (
-    <TeamDetailView
-      detail={detail}
-      transactions={transactions}
-      headToHead={headToHead}
-    />
+    <Suspense>
+      <TeamDetailView
+        detail={detail}
+        transactions={transactions}
+        headToHead={headToHead}
+      />
+    </Suspense>
   );
 }

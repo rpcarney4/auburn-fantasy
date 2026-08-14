@@ -45,7 +45,9 @@ export function TeamView({
     const param = searchParams.get("season");
     return param ? Number(param) : byView(initialView).seasons[0];
   });
-  const activeSeason = active.bySeason[season ?? -1] ?? active.bySeason[active.seasons[0]];
+  const resolvedSeason =
+    season !== undefined && active.bySeason[season] ? season : active.seasons[0];
+  const activeSeason = active.bySeason[resolvedSeason ?? -1];
 
   const seasons = useMemo(() => active.seasons, [active]);
 
@@ -125,6 +127,8 @@ export function TeamView({
                     key={team.id}
                     team={team}
                     isHistorical={activeSeason.isHistorical}
+                    leagueType={view}
+                    season={resolvedSeason as number}
                   />
                 ))}
               </div>
@@ -138,6 +142,8 @@ export function TeamView({
               key={team.id}
               team={team}
               isHistorical={activeSeason.isHistorical}
+              leagueType={view}
+              season={resolvedSeason as number}
             />
           ))}
         </div>
