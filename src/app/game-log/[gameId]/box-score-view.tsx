@@ -47,34 +47,58 @@ function PlayerTile({
     </div>
   );
 
-  if (player.statLines.length === 0) {
-    return (
-      <div
-        className={cn(
-          "rounded-lg border-transparent bg-muted/40 px-2 py-2 sm:px-3 sm:py-2.5",
-          mirrored ? "border-r-4" : "border-l-4",
-          wonSlot && "border-amber-400"
-        )}
-      >
-        {header}
-      </div>
-    );
-  }
+  const hasStats = player.statLines.length > 0;
 
+  // Reserves one line of height even when there's nothing to show, so a
+  // scoreless player's card doesn't come out shorter than its neighbors on
+  // large screens, where the stats row is always visible.
   const statsBlock = (
     <div
       className={cn(
         "flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground sm:text-xs",
-        mirrored ? "justify-end pr-7.5 sm:pr-10" : "pl-7.5 sm:pl-10"
+        mirrored ? "pr-7.5 sm:pr-10" : "pl-7.5 sm:pl-10"
       )}
     >
-      {player.statLines.map((s) => (
-        <span key={s.label}>
-          {s.label}: {s.value}
-        </span>
-      ))}
+      {hasStats ? (
+        player.statLines.map((s) => (
+          <span key={s.label}>
+            {s.label}: {s.value}
+          </span>
+        ))
+      ) : (
+        <span className="invisible">—</span>
+      )}
     </div>
   );
+
+  if (!hasStats) {
+    return (
+      <>
+        {/* Small/medium screens: nothing to expand. */}
+        <div
+          className={cn(
+            "rounded-lg border-transparent bg-muted/40 px-2 py-2 sm:px-3 sm:py-2.5 lg:hidden",
+            mirrored ? "border-r-4" : "border-l-4",
+            wonSlot && "border-amber-400"
+          )}
+        >
+          {header}
+        </div>
+
+        {/* Large screens: match the height of tiles that do have stats. */}
+        <div
+          className={cn(
+            "hidden rounded-lg border-transparent bg-muted/40 px-3 py-2.5 lg:block",
+            mirrored ? "border-r-4" : "border-l-4",
+            wonSlot && "border-amber-400"
+          )}
+        >
+          {header}
+          <div className="mt-1.5">{statsBlock}</div>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
@@ -196,7 +220,7 @@ export function BoxScoreView({ boxScore }: { boxScore: BoxScore }) {
         {boxScore.isPlayoffs && <Badge variant="secondary">Playoffs</Badge>}
       </div>
 
-      <div className="flex gap-3 divide-x divide-border sm:gap-6">
+      <div className="flex divide-x divide-border">
         <div className="w-1/2 pr-3 sm:pr-6">
           <TeamColumn team={boxScore.home} />
         </div>
