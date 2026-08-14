@@ -17,12 +17,12 @@ type SeasonTeams = {
     user: { id: string; displayName: string; avatar: string | null };
     roster: {
       isStarter: boolean;
-      player: { id: string; fullName: string; position: string | null };
+      player: { id: string; fullName: string; position: string | null; nflTeam: string | null };
       avgScore: number | null;
     }[];
     taxi: {
       isStarter: boolean;
-      player: { id: string; fullName: string; position: string | null };
+      player: { id: string; fullName: string; position: string | null; nflTeam: string | null };
       avgScore: number | null;
     }[];
   }[];

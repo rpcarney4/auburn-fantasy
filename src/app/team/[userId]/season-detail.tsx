@@ -18,7 +18,10 @@ export function SeasonDetail({
       className="grid grid-cols-[2rem_1fr_auto] items-center gap-2"
     >
       <span className="text-muted-foreground">{r.player.position}</span>
-      <span>{r.player.fullName}</span>
+      <span>
+        {r.player.fullName}
+        {r.player.nflTeam ? ` · ${r.player.nflTeam}` : ""}
+      </span>
       <span className="text-right text-muted-foreground">
         {r.avgScore != null ? r.avgScore.toFixed(1) : "—"}
       </span>

@@ -137,6 +137,7 @@ export async function getBoxScore(gameId: string) {
         id: s.player.id,
         fullName: s.player.fullName,
         position: s.player.position,
+        nflTeam: s.player.nflTeam,
         points: s.points,
         isStarter: s.isStarter,
         statLines: boxScoreStatLines(

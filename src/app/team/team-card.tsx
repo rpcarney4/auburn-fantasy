@@ -33,7 +33,10 @@ export function TeamCard({
       )}
     >
       <span className="text-muted-foreground">{r.player.position}</span>
-      <span>{r.player.fullName}</span>
+      <span>
+        {r.player.fullName}
+        {r.player.nflTeam ? ` · ${r.player.nflTeam}` : ""}
+      </span>
       {isHistorical && (
         <span className="text-right text-muted-foreground">
           {r.avgScore != null ? r.avgScore.toFixed(1) : "—"}

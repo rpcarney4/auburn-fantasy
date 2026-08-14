@@ -20,9 +20,16 @@ export function PlayerTile({
   const hasStats = player.statLines.length > 0;
 
   const positionBadge = (
-    <span className="w-6 shrink-0 self-center text-[10px] font-medium text-muted-foreground sm:w-8 sm:text-xs">
-      {player.position ?? "—"}
-    </span>
+    <div className="flex w-6 shrink-0 flex-col items-center self-center sm:w-8">
+      <span className="text-[10px] font-medium text-muted-foreground sm:text-xs">
+        {player.position ?? "—"}
+      </span>
+      {player.nflTeam && (
+        <span className="text-[9px] text-muted-foreground/70 sm:text-[10px]">
+          {player.nflTeam}
+        </span>
+      )}
+    </div>
   );
   const nameLine = (
     <span
