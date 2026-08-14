@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -32,6 +33,7 @@ type RosterPlayer = {
 type TeamData = {
   id: string;
   teamName: string | null;
+  avatar: string | null;
   wins: number;
   losses: number;
   ties: number;
@@ -92,8 +94,26 @@ function TeamCard({ team, isHistorical }: { team: TeamData; isHistorical: boolea
       <Card className="h-full transition-all duration-150 hover:-translate-y-1 hover:ring-2 hover:ring-primary hover:shadow-lg">
         <CardHeader>
           <CardTitle className="flex items-center justify-between text-base">
-            <span>{team.teamName || team.user.displayName}</span>
-            <Badge variant="secondary">
+            <span className="flex min-w-0 items-center gap-2">
+              {team.avatar ? (
+                <Image
+                  src={team.avatar}
+                  alt=""
+                  width={28}
+                  height={28}
+                  className="size-7 shrink-0 rounded-full object-cover"
+                />
+              ) : (
+                <span className="size-7 shrink-0 rounded-full bg-muted" />
+              )}
+              <span className="truncate text-xl">
+                {team.teamName || team.user.displayName}
+              </span>
+            </span>
+            <Badge
+              variant="secondary"
+              className="h-6 shrink-0 bg-white text-base text-black"
+            >
               {team.wins}-{team.losses}
               {team.ties ? `-${team.ties}` : ""}
             </Badge>
