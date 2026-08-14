@@ -41,7 +41,7 @@ type SleeperUser = {
   username: string | null;
   display_name: string;
   avatar: string | null;
-  metadata: { team_name?: string } | null;
+  metadata: { team_name?: string; avatar?: string } | null;
 };
 
 type SleeperRoster = {
@@ -244,9 +244,9 @@ async function syncSeason(type: LeagueType, sleeperLeague: SleeperLeague) {
       : undefined;
     if (!ownerUserId) continue; // orphaned/co-owned roster with no primary owner
 
-    const teamName =
-      sleeperUsers.find((u) => u.user_id === roster.owner_id)?.metadata
-        ?.team_name ?? null;
+    const ownerUser = sleeperUsers.find((u) => u.user_id === roster.owner_id);
+    const teamName = ownerUser?.metadata?.team_name ?? null;
+    const avatar = ownerUser?.metadata?.avatar ?? null;
 
     const pointsFor =
       (roster.settings.fpts ?? 0) + (roster.settings.fpts_decimal ?? 0) / 100;
@@ -268,6 +268,7 @@ async function syncSeason(type: LeagueType, sleeperLeague: SleeperLeague) {
         sleeperRosterId: roster.roster_id,
         userId: ownerUserId,
         teamName,
+        avatar,
         division,
         isChampion,
         wins: roster.settings.wins ?? 0,
@@ -279,6 +280,7 @@ async function syncSeason(type: LeagueType, sleeperLeague: SleeperLeague) {
       update: {
         userId: ownerUserId,
         teamName,
+        avatar,
         division,
         isChampion,
         wins: roster.settings.wins ?? 0,

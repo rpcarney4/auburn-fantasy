@@ -34,7 +34,7 @@ export default async function HomePage() {
           className="h-20 w-auto"
           priority
         />
-        <h1 className="text-3xl font-bold tracking-tight">AUB Fantasy League</h1>
+        <h1 className="text-[38px] font-bold tracking-tight">AUB Fantasy League</h1>
         <p className="max-w-lg text-muted-foreground">
           Home of the dynasty and redraft leagues — same 10 managers, two ways
           to lose sleep every fall.
@@ -48,7 +48,7 @@ export default async function HomePage() {
         />
       ) : (
         <div className="flex flex-col gap-4">
-          <h2 className="text-center text-xl font-semibold tracking-tight">
+          <h2 className="text-center text-3xl font-semibold tracking-tight">
             Leagues at a Glance
           </h2>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -59,8 +59,8 @@ export default async function HomePage() {
       )}
 
       {seasons.length > 0 && (
-        <div className="flex flex-col gap-4">
-          <h2 className="text-center text-xl font-semibold tracking-tight">
+        <div className="mt-10 flex flex-col gap-4">
+          <h2 className="text-center text-3xl font-semibold tracking-tight">
             Past Seasons
           </h2>
           {seasons.map((s) => (

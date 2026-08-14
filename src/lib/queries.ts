@@ -135,12 +135,13 @@ export async function getSeasonSummaries(): Promise<SeasonSummary[]> {
   return summaries;
 }
 
-export type LeagueGlanceStat = { name: string; value: number } | null;
+export type LeagueGlanceStat = { name: string; value: number; avatar: string | null } | null;
 export type LeagueGlanceRecord = {
   name: string;
   wins: number;
   losses: number;
   ties: number;
+  avatar: string | null;
 } | null;
 export type LeaguePlacement = {
   userId: string;
@@ -150,6 +151,7 @@ export type LeaguePlacement = {
 };
 export type LeagueGlanceRivalry = {
   dominantName: string;
+  dominantAvatar: string | null;
   submissiveName: string;
   wins: number;
   losses: number;
@@ -227,6 +229,21 @@ export async function getLeagueGlance(type: LeagueType): Promise<LeagueGlance> {
     include: { user: true },
   });
 
+  // Each manager's most recent team avatar (a per-league-season photo, not
+  // the account-wide one), so stat tiles always show whoever currently
+  // holds the stat with their latest picture.
+  const leagueSeasonById = new Map(leagues.map((l) => [l.id, l.season]));
+  const avatarByUserId = new Map<string, { season: number; avatar: string | null }>();
+  for (const t of teams) {
+    const season = leagueSeasonById.get(t.leagueId) ?? -1;
+    const existing = avatarByUserId.get(t.userId);
+    if (!existing || season > existing.season) {
+      avatarByUserId.set(t.userId, { season, avatar: t.avatar });
+    }
+  }
+  const avatarForUser = (userId: string): string | null =>
+    avatarByUserId.get(userId)?.avatar ?? null;
+
   // "Who's Your Daddy": the most lopsided head-to-head rivalry between any
   // two managers, across every season of this league type.
   const games = await prisma.game.findMany({
@@ -276,8 +293,10 @@ export async function getLeagueGlance(type: LeagueType): Promise<LeagueGlance> {
     if (diff > bestDiff) {
       bestDiff = diff;
       const aIsDominant = rec.aWins >= rec.bWins;
+      const dominantUserId = aIsDominant ? rec.userAId : rec.userBId;
       whosYourDaddy = {
-        dominantName: nameByUserId.get(aIsDominant ? rec.userAId : rec.userBId) ?? "Unknown",
+        dominantName: nameByUserId.get(dominantUserId) ?? "Unknown",
+        dominantAvatar: avatarForUser(dominantUserId),
         submissiveName: nameByUserId.get(aIsDominant ? rec.userBId : rec.userAId) ?? "Unknown",
         wins: aIsDominant ? rec.aWins : rec.bWins,
         losses: aIsDominant ? rec.bWins : rec.aWins,
@@ -442,7 +461,9 @@ export async function getLeagueGlance(type: LeagueType): Promise<LeagueGlance> {
   for (const [userId, count] of claimsByUser) {
     const totals = totalsByUser.get(userId);
     if (!totals) continue;
-    if (!hoarder || count > hoarder.value) hoarder = { name: totals.name, value: count };
+    if (!hoarder || count > hoarder.value) {
+      hoarder = { name: totals.name, value: count, avatar: avatarForUser(userId) };
+    }
   }
   const hoarderRanking: LeagueGlanceRankingEntry[] = activeTotals
     .map((t) => ({ name: t.name, count: claimsByUser.get(t.userId) ?? 0 }))
@@ -489,14 +510,26 @@ export async function getLeagueGlance(type: LeagueType): Promise<LeagueGlance> {
 
   return {
     mostPointsScored: mostPointsScored
-      ? { name: mostPointsScored.name, value: mostPointsScored.pointsFor }
+      ? {
+          name: mostPointsScored.name,
+          value: mostPointsScored.pointsFor,
+          avatar: avatarForUser(mostPointsScored.userId),
+        }
       : null,
     mostPointsScoredRanking,
     leastPointsScored: leastPointsScored
-      ? { name: leastPointsScored.name, value: leastPointsScored.pointsFor }
+      ? {
+          name: leastPointsScored.name,
+          value: leastPointsScored.pointsFor,
+          avatar: avatarForUser(leastPointsScored.userId),
+        }
       : null,
     leagueHole: leagueHole
-      ? { name: leagueHole.name, value: leagueHole.pointsAgainst }
+      ? {
+          name: leagueHole.name,
+          value: leagueHole.pointsAgainst,
+          avatar: avatarForUser(leagueHole.userId),
+        }
       : null,
     leagueHoleRanking,
     bestManager: bestManager
@@ -505,6 +538,7 @@ export async function getLeagueGlance(type: LeagueType): Promise<LeagueGlance> {
           wins: bestManager.wins,
           losses: bestManager.losses,
           ties: bestManager.ties,
+          avatar: avatarForUser(bestManager.userId),
         }
       : null,
     bestManagerRanking,
@@ -514,12 +548,17 @@ export async function getLeagueGlance(type: LeagueType): Promise<LeagueGlance> {
           wins: worstManager.wins,
           losses: worstManager.losses,
           ties: worstManager.ties,
+          avatar: avatarForUser(worstManager.userId),
         }
       : null,
     hoarder,
     hoarderRanking,
     skillDiff: skillDiff
-      ? { name: skillDiff.name, value: skillDiff.pointsAgainst - skillDiff.pointsFor }
+      ? {
+          name: skillDiff.name,
+          value: skillDiff.pointsAgainst - skillDiff.pointsFor,
+          avatar: avatarForUser(skillDiff.userId),
+        }
       : null,
     skillDiffRanking,
     whosYourDaddy,
@@ -572,7 +611,7 @@ export async function getTeamsByType(type: LeagueType) {
   for (const league of leagues) {
     const isHistorical = league.season !== latestSeason;
 
-    const teams = await prisma.team.findMany({
+    const unsortedTeams = await prisma.team.findMany({
       where: { leagueId: league.id },
       include: {
         user: true,
@@ -581,7 +620,19 @@ export async function getTeamsByType(type: LeagueType) {
           orderBy: [{ isStarter: "desc" }, { player: { position: "asc" } }],
         },
       },
-      orderBy: [{ division: "asc" }, { user: { displayName: "asc" } }],
+    });
+    // Best record first within each division (win% then points for, same
+    // tiebreak used for standings elsewhere), rather than alphabetical.
+    const winPct = (t: { wins: number; losses: number; ties: number }) => {
+      const games = t.wins + t.losses + t.ties;
+      return games > 0 ? (t.wins + t.ties * 0.5) / games : 0;
+    };
+    const teams = [...unsortedTeams].sort((a, b) => {
+      const divDiff = (a.division ?? 0) - (b.division ?? 0);
+      if (divDiff !== 0) return divDiff;
+      const pctDiff = winPct(b) - winPct(a);
+      if (pctDiff !== 0) return pctDiff;
+      return b.pointsFor - a.pointsFor;
     });
 
     let avgScoreByTeamPlayer = new Map<string, number>();
@@ -602,6 +653,7 @@ export async function getTeamsByType(type: LeagueType) {
       teams: teams.map((t) => ({
         id: t.id,
         teamName: t.teamName,
+        avatar: t.avatar,
         wins: t.wins,
         losses: t.losses,
         ties: t.ties,
@@ -641,6 +693,7 @@ type SeasonTeams = {
   teams: {
     id: string;
     teamName: string | null;
+    avatar: string | null;
     wins: number;
     losses: number;
     ties: number;

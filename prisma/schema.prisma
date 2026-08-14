@@ -75,6 +75,10 @@ model Team {
   leagueId        String
   sleeperRosterId Int
   teamName        String?
+  // Per-league team photo (Sleeper's roster metadata.avatar, a direct image
+  // URL). Distinct from User.avatar (the account-wide profile picture) —
+  // this can differ by league and even by season for the same person.
+  avatar          String?
   // 1-indexed; matches the position in League.divisionNames. Null if the
   // league has no divisions.
   division        Int?

@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Popover,
@@ -82,21 +83,34 @@ function GameList({ games }: { games: LeagueGlanceGame[] }) {
 function GlanceTile({
   label,
   name,
+  avatar,
   value,
   ranking,
 }: {
   label: string;
   name: string | undefined;
+  avatar?: string | null;
   value: string | undefined;
   ranking?: LeagueGlanceRankingEntry[];
 }) {
   const tile = (
-    <div className="flex flex-col gap-1 rounded-lg bg-muted/50 p-3">
-      <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-        {label}
-      </p>
-      <p className="truncate text-base font-semibold">{name ?? "—"}</p>
-      <p className="text-xs text-muted-foreground">{value ?? "No data yet"}</p>
+    <div className="flex items-center gap-3 rounded-lg bg-muted/50 p-3">
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+          {label}
+        </p>
+        <p className="truncate text-base font-semibold">{name ?? "—"}</p>
+        <p className="text-xs text-muted-foreground">{value ?? "No data yet"}</p>
+      </div>
+      {name && (
+        <Image
+          src={avatar || "/img/sleeper-profile.png"}
+          alt=""
+          width={56}
+          height={56}
+          className="size-14 shrink-0 rounded-full object-cover"
+        />
+      )}
     </div>
   );
 
@@ -145,6 +159,7 @@ export function LeagueGlanceBox({
           <GlanceTile
             label="Most Points Scored"
             name={glance.mostPointsScored?.name}
+            avatar={glance.mostPointsScored?.avatar}
             value={
               glance.mostPointsScored
                 ? `${glance.mostPointsScored.value.toFixed(1)} pts`
@@ -155,6 +170,7 @@ export function LeagueGlanceBox({
           <GlanceTile
             label="Least Points Scored"
             name={glance.leastPointsScored?.name}
+            avatar={glance.leastPointsScored?.avatar}
             value={
               glance.leastPointsScored
                 ? `${glance.leastPointsScored.value.toFixed(1)} pts`
@@ -164,6 +180,7 @@ export function LeagueGlanceBox({
           <GlanceTile
             label="League Hole"
             name={glance.leagueHole?.name}
+            avatar={glance.leagueHole?.avatar}
             value={
               glance.leagueHole
                 ? `${glance.leagueHole.value.toFixed(1)} pts against`
@@ -174,17 +191,20 @@ export function LeagueGlanceBox({
           <GlanceTile
             label="Best Manager"
             name={glance.bestManager?.name}
+            avatar={glance.bestManager?.avatar}
             value={glance.bestManager ? formatRecord(glance.bestManager) : undefined}
             ranking={glance.bestManagerRanking}
           />
           <GlanceTile
             label="Worst Manager"
             name={glance.worstManager?.name}
+            avatar={glance.worstManager?.avatar}
             value={glance.worstManager ? formatRecord(glance.worstManager) : undefined}
           />
           <GlanceTile
             label="The Hoarder"
             name={glance.hoarder?.name}
+            avatar={glance.hoarder?.avatar}
             value={
               glance.hoarder
                 ? `${glance.hoarder.value} claim${glance.hoarder.value === 1 ? "" : "s"}`
@@ -195,6 +215,7 @@ export function LeagueGlanceBox({
           <GlanceTile
             label="Skill Diff"
             name={glance.skillDiff?.name}
+            avatar={glance.skillDiff?.avatar}
             value={
               glance.skillDiff
                 ? `-${glance.skillDiff.value.toFixed(1)} point differential`
@@ -209,6 +230,7 @@ export function LeagueGlanceBox({
                 ? `${glance.whosYourDaddy.dominantName} vs ${glance.whosYourDaddy.submissiveName}`
                 : undefined
             }
+            avatar={glance.whosYourDaddy?.dominantAvatar}
             value={
               glance.whosYourDaddy ? formatRecord(glance.whosYourDaddy) : undefined
             }
