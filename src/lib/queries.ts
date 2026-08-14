@@ -1371,29 +1371,41 @@ export async function getBoxScore(gameId: string) {
   };
 
   // Pairs each player against their opposite-team counterpart at the same
-  // slot (same starter/bench group, same position, same rank within it —
-  // e.g. Team A's top starting RB vs Team B's top starting RB), so the UI
-  // can mark whether that slot was won or lost.
+  // slot, so the UI can mark whether that slot was won or lost. Starters are
+  // paired by roster-slot order (both teams' starters are already ordered
+  // QB, RB1, RB2, ..., FLEX, ... by orderStartersBySlot), not by position —
+  // otherwise a WR filling the FLEX slot would never get matched against an
+  // RB filling the opponent's FLEX slot. Bench players have no slot order,
+  // so they're still paired by same-position rank.
   const withMatchupResults = (
     players: ReturnType<typeof buildPlayers>,
     opponents: ReturnType<typeof buildPlayers>
   ) => {
-    const slotKey = (p: (typeof players)[number]) => `${p.isStarter}:${p.position ?? ""}`;
-    const seen = new Map<string, number>();
-    const opponentSeen = new Map<string, number>();
-    const opponentsBySlot = new Map<string, (typeof opponents)[number]>();
+    const opponentStarters = opponents.filter((o) => o.isStarter);
+    const benchKey = (p: (typeof players)[number]) => p.position ?? "";
+    const opponentBenchSeen = new Map<string, number>();
+    const opponentsByBenchSlot = new Map<string, (typeof opponents)[number]>();
     for (const o of opponents) {
-      const key = slotKey(o);
-      const idx = opponentSeen.get(key) ?? 0;
-      opponentSeen.set(key, idx + 1);
-      opponentsBySlot.set(`${key}#${idx}`, o);
+      if (o.isStarter) continue;
+      const key = benchKey(o);
+      const idx = opponentBenchSeen.get(key) ?? 0;
+      opponentBenchSeen.set(key, idx + 1);
+      opponentsByBenchSlot.set(`${key}#${idx}`, o);
     }
 
+    let starterIdx = 0;
+    const benchSeen = new Map<string, number>();
     return players.map((p) => {
-      const key = slotKey(p);
-      const idx = seen.get(key) ?? 0;
-      seen.set(key, idx + 1);
-      const opponent = opponentsBySlot.get(`${key}#${idx}`);
+      let opponent: (typeof opponents)[number] | undefined;
+      if (p.isStarter) {
+        opponent = opponentStarters[starterIdx];
+        starterIdx += 1;
+      } else {
+        const key = benchKey(p);
+        const idx = benchSeen.get(key) ?? 0;
+        benchSeen.set(key, idx + 1);
+        opponent = opponentsByBenchSlot.get(`${key}#${idx}`);
+      }
       const matchupResult =
         opponent == null
           ? null
