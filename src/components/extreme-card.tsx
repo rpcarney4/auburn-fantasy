@@ -10,8 +10,8 @@ export function ExtremeCard({
   value: string | undefined;
 }) {
   return (
-    <Card className="bg-muted/40">
-      <CardContent className="flex flex-col gap-1">
+    <Card className="h-full bg-muted/40">
+      <CardContent className="flex h-full flex-1 flex-col items-center justify-center gap-1 text-center">
         <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
           {label}
         </p>

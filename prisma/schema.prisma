@@ -226,6 +226,12 @@ model DraftPick {
   player   Player? @relation(fields: [playerId], references: [id])
   playerId String?
   isKeeper Boolean @default(false)
+  // Sleeper roster_id of this draft slot's original owner (via the draft's
+  // slot_to_roster_id[draft_slot]) — differs from `team` when the pick was
+  // traded before draft day. Lets a traded pick (TradeAsset.pickOriginalRosterId)
+  // be linked to the player it was actually used on, however many times it
+  // changed hands first.
+  originalRosterId Int?
 
   @@unique([draftId, pickNo])
 }
@@ -254,10 +260,17 @@ model TradeAsset {
   player          Player?        @relation(fields: [playerId], references: [id])
   playerId        String?
   pickDescription String?
-  fromTeam        Team           @relation("FromTeam", fields: [fromTeamId], references: [id])
-  fromTeamId      String
-  toTeam          Team           @relation("ToTeam", fields: [toTeamId], references: [id])
-  toTeamId        String
+  // For PICK assets: identifies the specific pick (season + round + the
+  // Sleeper roster_id of its *original* slot owner, stable across however
+  // many times this same pick gets re-traded) so the Trade History page can
+  // show whether it was later re-traded or which player it was used on.
+  pickSeason           Int?
+  pickRound            Int?
+  pickOriginalRosterId Int?
+  fromTeam             Team           @relation("FromTeam", fields: [fromTeamId], references: [id])
+  fromTeamId           String
+  toTeam               Team           @relation("ToTeam", fields: [toTeamId], references: [id])
+  toTeamId             String
 }
 
 // A waiver claim, free agent add, or drop — the non-trade half of roster
