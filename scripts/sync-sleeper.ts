@@ -88,6 +88,7 @@ type SleeperDraftPick = {
   round: number;
   pick_no: number;
   roster_id: number;
+  draft_slot: number;
   player_id: string | null;
   is_keeper: boolean | null;
 };
@@ -95,6 +96,10 @@ type SleeperDraftPick = {
 type SleeperDraft = {
   draft_id: string;
   start_time: number | null;
+  // Maps draft_slot -> the roster_id that originally owned that slot. A
+  // pick's own `roster_id` is who actually drafted it, which differs from
+  // this when the pick was traded before draft day.
+  slot_to_roster_id: Record<string, number>;
 };
 
 type SleeperTransaction = {
@@ -108,6 +113,10 @@ type SleeperTransaction = {
   draft_picks: {
     season: string;
     round: number;
+    // The original slot owner (stable across however many times this same
+    // pick gets re-traded) — distinct from owner_id/previous_owner_id,
+    // which describe just this one trade's leg.
+    roster_id: number;
     owner_id: number;
     previous_owner_id: number;
   }[];
@@ -476,6 +485,8 @@ async function syncSeason(type: LeagueType, sleeperLeague: SleeperLeague) {
       const teamId = teamIdByRosterId.get(pick.roster_id);
       if (!teamId) continue;
       await ensurePlayer(pick.player_id);
+      const originalRosterId =
+        sleeperDraft.slot_to_roster_id?.[String(pick.draft_slot)] ?? null;
 
       await prisma.draftPick.upsert({
         where: {
@@ -488,12 +499,14 @@ async function syncSeason(type: LeagueType, sleeperLeague: SleeperLeague) {
           teamId,
           playerId: pick.player_id,
           isKeeper: pick.is_keeper ?? false,
+          originalRosterId,
         },
         update: {
           round: pick.round,
           teamId,
           playerId: pick.player_id,
           isKeeper: pick.is_keeper ?? false,
+          originalRosterId,
         },
       });
     }
@@ -617,6 +630,9 @@ async function syncSeason(type: LeagueType, sleeperLeague: SleeperLeague) {
             tradeId: trade.id,
             assetType: TradeAssetType.PICK,
             pickDescription: `${dp.season} Round ${dp.round} Pick`,
+            pickSeason: Number(dp.season),
+            pickRound: dp.round,
+            pickOriginalRosterId: dp.roster_id,
             fromTeamId,
             toTeamId,
           },

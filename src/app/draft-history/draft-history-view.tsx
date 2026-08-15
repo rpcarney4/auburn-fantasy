@@ -68,7 +68,13 @@ export function DraftHistoryView({
           No {view.toLowerCase()} draft data synced yet.
         </p>
       ) : (
-        <DraftBoard picks={activeSeason.picks} />
+        <DraftBoard
+          picks={activeSeason.picks}
+          // Redraft drafts are always snake, and so was the very first
+          // (startup) Dynasty draft in 2023. Every Dynasty rookie draft
+          // since is linear, so it keeps the plain positional layout.
+          snakeAnchored={view === "REDRAFT" || activeSeason.season === 2023}
+        />
       )}
     </div>
   );

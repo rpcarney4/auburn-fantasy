@@ -18,7 +18,10 @@ export function AssetRow({
       >
         {isIncoming ? "+" : "−"}
       </span>
-      <span className="min-w-0 flex-1 truncate">{asset.label}</span>
+      <span className="min-w-0 flex-1 truncate">
+        {asset.label}
+        {asset.pickNote ? ` (${asset.pickNote})` : ""}
+      </span>
       {asset.position && (
         <span className="shrink-0 text-xs text-muted-foreground">
           {asset.position}
