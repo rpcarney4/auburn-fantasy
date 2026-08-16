@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate",
-    "sync:sleeper": "tsx scripts/sync-sleeper.ts"
+    "sync:sleeper": "tsx scripts/sync-sleeper.ts",
+    "sync:sleeper:full": "tsx scripts/sync-sleeper.ts --full"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

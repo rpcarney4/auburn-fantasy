@@ -1,12 +1,11 @@
-name: Sync Sleeper data
+name: Full sync Sleeper data (historical)
 
 on:
   schedule:
-    # Once daily, in the early morning ET — after Monday Night Football has
-    # ended, so the week's final scores are in. Nothing in the app needs
-    # live in-week scores, so this is all the freshness it actually needs.
-    # Only syncs the current season; see sync-sleeper-full.yml for history.
-    - cron: "0 10 * * *"
+    # Monthly safety net for late corrections to past seasons. The daily
+    # sync-sleeper.yml only touches the current season — this walks the
+    # entire previous_league_id chain back through every prior season too.
+    - cron: "0 10 1 * *"
   workflow_dispatch: {}
 
 jobs:
@@ -27,6 +26,6 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
 
-      - run: npm run sync:sleeper
+      - run: npm run sync:sleeper:full
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}

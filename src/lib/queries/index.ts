@@ -11,3 +11,5 @@ export { getGamesForType } from "./get-games-for-type";
 export { getTeamNamesForType } from "./get-team-names-for-type";
 export { getBoxScore } from "./get-box-score";
 export { getPlayoffBracket } from "./get-playoff-bracket";
+export { getPredictionMatchups } from "./get-prediction-matchups";
+export { getPredictionLeaderboard } from "./get-prediction-leaderboard";

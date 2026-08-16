@@ -19,3 +19,9 @@ export type { GameLogGame } from "./game-log-game";
 export type { TeamOption } from "./team-option";
 export type { TeamsByType, SeasonTeams, TeamData, RosterPlayer } from "./teams-by-type";
 export type { DraftsByType, DraftPickRow } from "./drafts-by-type";
+export type {
+  PredictionStarter,
+  PredictionTeamSide,
+  PredictionMatchup,
+} from "./prediction-matchup";
+export type { PredictionLeaderboardEntry } from "./prediction-leaderboard-entry";

@@ -1,6 +1,7 @@
 import type { LeagueType } from "@prisma/client";
 import { prisma } from "../prisma";
-import { POSITION_ORDER, ROSTER_SLOTS } from "../constants";
+import { POSITION_ORDER } from "../constants";
+import { buildSlotSequence } from "./_shared";
 
 // Curated stat lines per position, pulled from the raw Sleeper stat keys
 // stored on PlayerWeekScore.stats. Values are rounded since Sleeper reports
@@ -54,26 +55,6 @@ function boxScoreStatLines(
     default:
       return [];
   }
-}
-
-// Builds the roster-slot sequence for a league type, e.g. Redraft:
-// [QB, RB, RB, WR, WR, TE, FLEX, K, DEF]. Used to order a box score's
-// starters by roster slot rather than just by position.
-function buildSlotSequence(leagueType: LeagueType) {
-  const slots = ROSTER_SLOTS[leagueType];
-  const sequence: ((position: string | null) => boolean)[] = [];
-  const push = (n: number, predicate: (position: string | null) => boolean) => {
-    for (let i = 0; i < n; i++) sequence.push(predicate);
-  };
-  push(slots.QB, (p) => p === "QB");
-  push(slots.RB, (p) => p === "RB");
-  push(slots.WR, (p) => p === "WR");
-  push(slots.TE, (p) => p === "TE");
-  push(slots.FLEX, (p) => ["RB", "WR", "TE"].includes(p ?? ""));
-  push(slots.SFLEX, (p) => ["QB", "RB", "WR", "TE"].includes(p ?? ""));
-  push(slots.K, (p) => p === "K");
-  push(slots.DEF, (p) => p === "DEF");
-  return sequence;
 }
 
 // Orders actual starters by roster slot (QB1, RB1, RB2, ..., FLEX, ...)
