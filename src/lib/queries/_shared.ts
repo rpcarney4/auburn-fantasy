@@ -16,6 +16,27 @@ export function compareRosterEntries(
   return (b.avgScore ?? -Infinity) - (a.avgScore ?? -Infinity);
 }
 
+// Builds the roster-slot sequence for a league type, e.g. Redraft:
+// [QB, RB, RB, WR, WR, TE, FLEX, K, DEF]. Used to order starters by roster
+// slot rather than just by position group.
+// Shared by getBoxScore and getPredictionMatchups.
+export function buildSlotSequence(leagueType: LeagueType) {
+  const slots = ROSTER_SLOTS[leagueType];
+  const sequence: ((position: string | null) => boolean)[] = [];
+  const push = (n: number, predicate: (position: string | null) => boolean) => {
+    for (let i = 0; i < n; i++) sequence.push(predicate);
+  };
+  push(slots.QB, (p) => p === "QB");
+  push(slots.RB, (p) => p === "RB");
+  push(slots.WR, (p) => p === "WR");
+  push(slots.TE, (p) => p === "TE");
+  push(slots.FLEX, (p) => ["RB", "WR", "TE"].includes(p ?? ""));
+  push(slots.SFLEX, (p) => ["QB", "RB", "WR", "TE"].includes(p ?? ""));
+  push(slots.K, (p) => p === "K");
+  push(slots.DEF, (p) => p === "DEF");
+  return sequence;
+}
+
 // Computes the highest-scoring lineup possible for one week given the
 // players available and the slot requirements. Filling strict positions
 // first, then FLEX, then SFLEX is optimal here because each tier's

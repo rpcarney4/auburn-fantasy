@@ -16,6 +16,7 @@ const LINKS = [
   { href: "/", label: "Home" },
   { href: "/team", label: "Teams" },
   { href: "/game-log", label: "Game Log" },
+  { href: "/predictions", label: "Prediction" },
   { href: "/playoffs", label: "Playoffs" },
   { href: "/draft-history", label: "Draft History" },
   { href: "/trade-history", label: "Trade History" },

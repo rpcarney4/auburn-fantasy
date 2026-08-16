@@ -6,7 +6,8 @@ import {
 } from "@/components/ui/accordion";
 import { cn } from "@/lib/utils";
 import type { BoxScorePlayer } from "@/lib/types";
-import { Headshot, playerHeadshotUrl } from "./headshot";
+import { playerHeadshotUrl } from "@/lib/player-headshot";
+import { Headshot } from "@/components/headshot";
 
 export function PlayerTile({
   player,

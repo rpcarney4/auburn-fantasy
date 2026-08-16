@@ -1,6 +1,7 @@
 // Prisma schema for the Auburn Fantasy league site.
 // Data is populated by scripts/sync-sleeper.ts on a schedule (see .github/workflows/sync-sleeper.yml),
-// not written to directly by the app.
+// not written to directly by the app — with one exception: the Prediction
+// model, written by the Predictions page's server actions.
 
 generator client {
   provider = "prisma-client-js"
@@ -27,6 +28,11 @@ enum RosterTransactionType {
   DROP
 }
 
+enum PredictionPick {
+  HOME
+  AWAY
+}
+
 // One row per real person. Shared across both the dynasty and redraft leagues.
 model User {
   id          String  @id @default(cuid())
@@ -34,8 +40,13 @@ model User {
   username    String
   displayName String
   avatar      String?
+  // 6-digit PIN, entered on the Predictions page to identify this person
+  // and authorize saving their picks. Generated once by a one-off script,
+  // distributed out of band (never shown anywhere in the app itself).
+  predictionCode String? @unique
 
-  teams Team[]
+  teams       Team[]
+  predictions Prediction[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -176,7 +187,27 @@ model Game {
   awayScore  Float
   isPlayoffs Boolean @default(false)
 
+  predictions Prediction[]
+
   @@unique([leagueId, week, homeTeamId, awayTeamId])
+}
+
+// One user's straight-up (no margin) pick for who wins a given Game,
+// submitted via the Predictions page. Picks lock at 6pm ET the Wednesday of
+// that game's week; upserted per (userId, gameId) so editing one pick never
+// touches any of the user's other picks.
+model Prediction {
+  id     String         @id @default(cuid())
+  user   User           @relation(fields: [userId], references: [id])
+  userId String
+  game   Game           @relation(fields: [gameId], references: [id])
+  gameId String
+  pick   PredictionPick
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, gameId])
 }
 
 // One matchup from Sleeper's winners bracket, used to render the Playoffs

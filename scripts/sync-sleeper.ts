@@ -1,6 +1,17 @@
 // Pulls league, roster, matchup, draft, and trade data from the Sleeper API
-// and upserts it into Postgres via Prisma. Run manually with `npm run sync:sleeper`,
-// or on a schedule via .github/workflows/sync-sleeper.yml.
+// and upserts it into Postgres via Prisma.
+//
+// By default only syncs each league type's CURRENT season — the common
+// case, run daily via .github/workflows/sync-sleeper.yml. Pass --full to
+// also walk the previous_league_id chain and resync every past season;
+// that's only needed for backfills or late corrections to historical data,
+// so it runs manually or via the monthly
+// .github/workflows/sync-sleeper-full.yml instead.
+//
+// Either way, weeks that are already final are skipped — once a week is
+// scored and the season has moved past it, that data never changes, so
+// re-requesting it on every run is pure waste. Only the most recent final
+// week (in case of late corrections) plus everything after it gets synced.
 //
 // Sleeper's API is public and read-only: https://docs.sleeper.com/
 
@@ -187,6 +198,19 @@ async function ensurePlayer(playerId: string | null | undefined) {
 
 // --- Season sync -------------------------------------------------------------
 
+// Weeks strictly before the last already-final week never change once the
+// season has moved past them, so re-requesting them every sync is wasted
+// egress. Resume one week back from the last final score (to pick up any
+// late stat corrections) rather than always starting over at week 1.
+async function getSyncStartWeek(leagueId: string): Promise<number> {
+  const lastFinal = await prisma.game.findFirst({
+    where: { leagueId, NOT: { homeScore: 0, awayScore: 0 } },
+    orderBy: { week: "desc" },
+    select: { week: true },
+  });
+  return lastFinal ? Math.max(1, lastFinal.week - 1) : 1;
+}
+
 async function syncSeason(type: LeagueType, sleeperLeague: SleeperLeague) {
   const season = Number(sleeperLeague.season);
   console.log(`Syncing ${type} ${season} (league ${sleeperLeague.league_id})...`);
@@ -207,6 +231,7 @@ async function syncSeason(type: LeagueType, sleeperLeague: SleeperLeague) {
     },
     update: { type, season, divisionNames },
   });
+  const startWeek = await getSyncStartWeek(league.id);
 
   // Winners bracket, for the champion badge and the Playoffs page.
   let bracket: SleeperBracketMatch[] = [];
@@ -321,7 +346,7 @@ async function syncSeason(type: LeagueType, sleeperLeague: SleeperLeague) {
   // roster_id -> points, per week. Used below to attach scores to the
   // winners bracket, since Sleeper's bracket endpoint doesn't include them.
   const pointsByRosterIdByWeek = new Map<number, Map<number, number>>();
-  for (let week = 1; week <= MAX_WEEKS_PER_SEASON; week++) {
+  for (let week = startWeek; week <= MAX_WEEKS_PER_SEASON; week++) {
     const entries = await sleeperGet<SleeperMatchupEntry[]>(
       `/league/${sleeperLeague.league_id}/matchups/${week}`
     );
@@ -513,7 +538,7 @@ async function syncSeason(type: LeagueType, sleeperLeague: SleeperLeague) {
   }
 
   // Trades, waiver claims, free agent adds, and drops
-  for (let week = 1; week <= MAX_WEEKS_PER_SEASON; week++) {
+  for (let week = startWeek; week <= MAX_WEEKS_PER_SEASON; week++) {
     const transactions = await sleeperGet<SleeperTransaction[]>(
       `/league/${sleeperLeague.league_id}/transactions/${week}`
     );
@@ -644,12 +669,37 @@ async function syncSeason(type: LeagueType, sleeperLeague: SleeperLeague) {
 
 // --- Chain walking -----------------------------------------------------------
 
-async function syncLeagueChain(type: LeagueType, startingLeagueId: string) {
+// Default mode: only the current season (the starting league) is synced —
+// no walk back through history. Full mode walks the entire
+// previous_league_id chain, resyncing every past season too; the walk stops
+// gracefully rather than failing the whole job if an old league ever
+// becomes unreachable (e.g. Sleeper removes it), since that's expected to
+// happen eventually and shouldn't take down the sync of current data.
+async function syncLeagueChain(
+  type: LeagueType,
+  startingLeagueId: string,
+  full: boolean
+) {
+  if (!full) {
+    const sleeperLeague = await sleeperGet<SleeperLeague>(
+      `/league/${startingLeagueId}`
+    );
+    await syncSeason(type, sleeperLeague);
+    return;
+  }
+
   let leagueId: string | null = startingLeagueId;
   while (leagueId) {
-    const sleeperLeague: SleeperLeague = await sleeperGet<SleeperLeague>(
-      `/league/${leagueId}`
-    );
+    let sleeperLeague: SleeperLeague;
+    try {
+      sleeperLeague = await sleeperGet<SleeperLeague>(`/league/${leagueId}`);
+    } catch (err) {
+      console.warn(
+        `Stopping historical walk for ${type} — couldn't fetch league ${leagueId}:`,
+        err
+      );
+      break;
+    }
     await syncSeason(type, sleeperLeague);
     leagueId =
       sleeperLeague.previous_league_id &&
@@ -660,10 +710,11 @@ async function syncLeagueChain(type: LeagueType, startingLeagueId: string) {
 }
 
 async function main() {
+  const full = process.argv.includes("--full");
   await loadPlayerCache();
-  await syncLeagueChain(LeagueType.DYNASTY, SLEEPER_LEAGUE_STARTING_IDS.DYNASTY);
-  await syncLeagueChain(LeagueType.REDRAFT, SLEEPER_LEAGUE_STARTING_IDS.REDRAFT);
-  console.log("Sync complete.");
+  await syncLeagueChain(LeagueType.DYNASTY, SLEEPER_LEAGUE_STARTING_IDS.DYNASTY, full);
+  await syncLeagueChain(LeagueType.REDRAFT, SLEEPER_LEAGUE_STARTING_IDS.REDRAFT, full);
+  console.log(full ? "Full sync complete." : "Sync complete.");
 }
 
 main()
