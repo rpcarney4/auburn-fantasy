@@ -3,9 +3,20 @@ import { prisma } from "../prisma";
 import { ROSTER_SLOTS } from "../constants";
 import { compareRosterEntries, optimalWeekTotal } from "./_shared";
 
+type ScheduleEntry = {
+  week: number;
+  opponentName: string;
+  ownScore: number;
+  opponentScore: number;
+  // null means the game hasn't been played yet (Sleeper pre-generates the
+  // full season's matchups with 0-0 placeholder scores).
+  result: "W" | "L" | "T" | null;
+};
+
 type TeamSeasonStats = {
   gamesPlayed: number;
   weeklyScores: { week: number; points: number; isPlayoffs: boolean }[];
+  schedule: ScheduleEntry[];
   pointsForMax: number;
   pointsForAvg: number | null;
   efficiency: number | null;
@@ -55,6 +66,10 @@ export async function getTeamDetail(userId: string) {
       }),
       prisma.game.findMany({
         where: { leagueId: t.leagueId, OR: [{ homeTeamId: t.id }, { awayTeamId: t.id }] },
+        include: {
+          homeTeam: { include: { user: true } },
+          awayTeam: { include: { user: true } },
+        },
         orderBy: { week: "asc" },
       }),
     ]);
@@ -67,6 +82,28 @@ export async function getTeamDetail(userId: string) {
       points: g.homeTeamId === t.id ? g.homeScore : g.awayScore,
       isPlayoffs: g.isPlayoffs,
     }));
+    const schedule: ScheduleEntry[] = games
+      .filter((g) => !g.isPlayoffs)
+      .map((g) => {
+        const isHome = g.homeTeamId === t.id;
+        const ownScore = isHome ? g.homeScore : g.awayScore;
+        const opponentScore = isHome ? g.awayScore : g.homeScore;
+        const opponentTeam = isHome ? g.awayTeam : g.homeTeam;
+        const unplayed = g.homeScore === 0 && g.awayScore === 0;
+        return {
+          week: g.week,
+          opponentName: opponentTeam.user.displayName,
+          ownScore,
+          opponentScore,
+          result: unplayed
+            ? null
+            : ownScore > opponentScore
+              ? ("W" as const)
+              : ownScore < opponentScore
+                ? ("L" as const)
+                : ("T" as const),
+        };
+      });
 
     const byPlayer = new Map<
       string,
@@ -109,6 +146,7 @@ export async function getTeamDetail(userId: string) {
     statsByTeamId.set(t.id, {
       gamesPlayed,
       weeklyScores,
+      schedule,
       pointsForMax,
       pointsForAvg: gamesPlayed > 0 ? t.pointsFor / gamesPlayed : null,
       efficiency: pointsForMax > 0 ? t.pointsFor / pointsForMax : null,

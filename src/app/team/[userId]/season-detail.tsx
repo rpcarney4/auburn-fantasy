@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import type { HeadToHeadRecord, TeamDetailSeason } from "@/lib/types";
 import { StatTile } from "./stat-tile";
 import { HeadToHeadCard } from "./head-to-head-card";
+import { SeasonSchedule } from "./season-schedule";
 
 export function SeasonDetail({
   season,
@@ -132,7 +133,10 @@ export function SeasonDetail({
               average={season.stats.pointsForAvg}
             />
           </div>
-          <div className="w-full sm:w-1/2">
+          <div className="w-full sm:w-1/4">
+            <SeasonSchedule schedule={season.stats.schedule} />
+          </div>
+          <div className="w-full sm:w-1/4">
             <HeadToHeadCard records={headToHead} />
           </div>
         </div>
